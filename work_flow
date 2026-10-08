@@ -1,0 +1,240 @@
+# Marley-Style Clinical Laboratory Workflow & Real-Time Notification System
+
+This document outlines the complete end-to-end clinical lab workflow implemented across `slash-admin` (React/Vite) and `backend` (Django/DRF), powered by Celery asynchronous processing, Celery Beat periodic scheduling, and real-time streaming notifications via Redis Pub/Sub and Server-Sent Events (SSE).
+
+---
+
+## 1. End-to-End Workflow Diagram
+
+```text
++----------------------------------------------------------------------------------------------------+
+|                                    1. DOCTOR ORDERS LAB TEST                                       |
+|  Doctor fills Patient Encounter (/healthcare/encounters/new) with Investigations (Lab Tests).      |
+|  Doctor clicks "Save Encounter".                                                                   |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                              2. DJANGO AUTOMATION TRIGGER (on_submit)                              |
+|  • Creates ServiceRequest (Status: "Active", Category: "Lab Test", Intent: "Order").               |
+|  • Creates linked DiagnosticReport placeholder.                                                    |
+|  • Logs consultation and orders to PatientMedicalRecord.                                           |
+|  • Dispatches Celery task: task_notify_lab_order_created.delay(encounter_id, service_request_ids).  |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                             3. ASYNCHRONOUS NOTIFICATION & REAL-TIME ALERT                         |
+|  • Celery worker creates NotificationDelivery records for lab technicians and hospital staff.     |
+|  • Publishes event 'lab_order_created' to Redis Pub/Sub channel 'healthcare_notifications'.       |
+|  • Django SSE endpoint (/api/healthcare/realtime/stream/) streams event to connected clients.      |
+|  • slash-admin displays real-time toast alert: "🧪 New Lab Order: [Test] for [Patient]".           |
+|  • Bell icon badge counter increments (+1) in header bar.                                         |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                                4. LABORATORIST FULFILLMENT & RESULT ENTRY                          |
+|  • Lab technician opens Lab Tests list (/healthcare/diagnostics/lab-tests).                        |
+|  • Selects the test, enters specimen observations, reference ranges, and test values.             |
+|  • Changes status to "Completed" and saves.                                                        |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                                5. TEST APPROVAL & DOCTOR/PATIENT NOTIFICATION                      |
+|  • Lab supervisor reviews results and clicks "Approve".                                            |
+|  • Django automation on_lab_test_approve() calls task_notify_lab_result_approved.delay(test_id).    |
+|  • Updates linked ServiceRequest status to "Completed".                                            |
+|  • Sends email with full laboratory result summary to Patient (via Django email backend).          |
+|  • Creates NotificationDelivery record for ordering Doctor and Patient account.                    |
+|  • Publishes 'lab_result_approved' to Redis Pub/Sub.                                               |
+|  • slash-admin pops live toast alert to Doctor: "✅ Lab Result Approved: [Test] for [Patient]".     |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                                6. PATIENT PROFILE DIAGNOSTICS VIEW                                 |
+|  • Doctor or Patient opens Patient Detail (/healthcare/patients/:id).                             |
+|  • Clicks "Lab & Diagnostics" tab.                                                                 |
+|  • Views full history of tests, status badges (Approved/Completed), dates, and result summaries.   |
++-------------------------------------------------+--------------------------------------------------+
+                                                  |
+                                                  v
++-------------------------------------------------+--------------------------------------------------+
+|                                7. CELERY BEAT PERIODIC REMINDERS (SCHEDULER)                       |
+|  • Hourly cron runs task_check_unfulfilled_orders.                                                 |
+|  • Detects active lab ServiceRequests older than 24 hours.                                         |
+|  • Broadcasts 'pending_orders_reminder' real-time toast to lab technicians.                         |
++----------------------------------------------------------------------------------------------------+
+```
+
+---
+
+## 2. Step-by-Step Workflow Walkthrough
+
+### Step 1: Doctor Orders Lab Tests (Patient Encounter)
+- **Frontend URL**: `/healthcare/encounters/new`
+- **File**: `slash-admin/src/pages/healthcare/encounters/encounter-create.tsx`
+- The doctor selects:
+  1. **Patient** (searchable combobox).
+  2. **Healthcare Practitioner** (ordering physician).
+  3. **Department** (dynamic searchable picker from database).
+  4. **Encounter Impression**: Symptoms and Diagnosis with 2-line bold multiselects.
+  5. **Investigations (Lab Test)** table:
+     - Selects test from `LabTestTemplate` (e.g. *Complete Blood Count*, *Blood Glucose*, *Lipid Profile*).
+     - Enters test instructions or clinical comments (e.g. *"Stat urgent fasting"*).
+- When the doctor clicks **Save Encounter**, the encounter is submitted to `POST /api/healthcare/encounters/`.
+
+---
+
+### Step 2: Backend Automation Triggers
+- **File**: `backend/apps/healthcare/automation.py` (`on_encounter_submit`)
+- When the encounter is saved:
+  1. Iterates over prescribed lab tests (`lab_prescriptions`).
+  2. Creates a `ServiceRequest` for each lab test with `status="Active"`, `intent="Order"`, and `priority="Routine"|"Urgent"`.
+  3. Prepares a parent `DiagnosticReport` linked to the encounter and patient.
+  4. Records a consultation entry in `PatientMedicalRecord`.
+  5. Queues the Celery background task:
+     ```python
+     task_notify_lab_order_created.delay(encounter.id, sr_ids)
+     ```
+     *(Includes automatic fallback to synchronous execution if the Celery worker is offline).*
+
+---
+
+### Step 3: Real-Time Notifications Dispatched
+- **Files**:
+  - `backend/apps/healthcare/tasks.py` (`task_notify_lab_order_created`)
+  - `backend/apps/healthcare/realtime.py` (`publish_realtime_event`)
+  - `slash-admin/src/hooks/useRealtimeNotifications.ts`
+- **Backend processing**:
+  1. Generates `NotificationDelivery` database records for lab technicians and system managers.
+  2. Publishes JSON event payload to Redis channel `healthcare_notifications`.
+- **Frontend streaming**:
+  1. The browser's native `EventSource` receives the event via `GET /api/healthcare/realtime/stream/?token=...`.
+  2. Pops an instant toast:
+     > 🧪 **New Lab Order Created**  
+     > Dr. Susan Anderson prescribed 1 lab test(s) for patient James Anderson.  
+     > Tests: Blood Glucose
+  3. Increments the notification badge counter in `useNotificationStore`.
+  4. Populates the **Clinical** tab inside the notification drawer (`notice.tsx`).
+
+---
+
+### Step 4: Laboratorist Enters Results & Submits
+- **Frontend URL**: `/healthcare/diagnostics/lab-tests`
+- **Files**:
+  - `slash-admin/src/pages/healthcare/diagnostics/lab-tests.tsx`
+  - `slash-admin/src/pages/healthcare/diagnostics/lab-test-form.tsx`
+- The lab technician sees the new lab test row created from the doctor's service request.
+- Clicks **Edit / View** to open the lab test form:
+  - Enters test findings, numerical values, and reference range comparisons.
+  - Adds technician comments or observations.
+  - Changes status from `Draft` to `Completed`.
+  - Saves the record.
+
+---
+
+### Step 5: Supervisor Approves Test & Automatic Notifications
+- **File**: `slash-admin/src/pages/healthcare/diagnostics/lab-test-form.tsx`
+- When `status === "Completed"`, the **Approve** button becomes active.
+- Clicking **Approve** sends `PUT /api/healthcare/lab-tests/{id}/` with `status: "Approved"`.
+- Backend trigger `on_lab_test_approve(lab_test)` fires:
+  1. Dispatches Celery task `task_notify_lab_result_approved.delay(lab_test.id)`.
+  2. Updates linked `ServiceRequest` status from `Active` to `Completed`.
+  3. Sends an automated email summary to the patient's registered email address.
+  4. Creates in-app `NotificationDelivery` records for the ordering physician and the patient.
+  5. Publishes real-time event `lab_result_approved` to Redis Pub/Sub and SSE stream.
+- The doctor receives an instant real-time toast alert:
+  > ✅ **Lab Result Approved: Blood Glucose**  
+  > The laboratory has completed and approved results for 'Blood Glucose' for James Anderson.
+- A **Notify Doctor & Patient** button on the lab test form allows the laboratorist to manually re-send notifications if requested.
+
+---
+
+### Step 6: Patient Profile "Lab & Diagnostics" Tab
+- **Frontend URL**: `/healthcare/patients/:id`
+- **File**: `slash-admin/src/pages/healthcare/patients/patient-detail.tsx`
+- Clicking the **Lab & Diagnostics** tab shows:
+  - Prescribed and approved laboratory tests for this patient.
+  - Columns: **Test Name**, **Order / Test ID**, **Date**, **Ordering Doctor**, **Status Badge** (`Approved`, `Completed`, `Draft`), and **Result Summary**.
+  - Direct action button to open the full test report.
+
+---
+
+### Step 7: Periodic Background Scheduler (Celery Beat)
+- **File**: `backend/apps/healthcare/tasks.py` (`task_check_unfulfilled_orders`)
+- **Schedule**: Every hour (configured in `CELERY_BEAT_SCHEDULE` in `settings.py`).
+- Checks for active lab `ServiceRequest` records older than 24 hours.
+- If pending tests are found, dispatches a real-time reminder toast to lab staff:
+  > ⚠️ **Pending Orders Reminder**  
+  > There are 6 active orders pending fulfillment for over 24 hours.
+
+---
+
+## 3. Key Source Files Reference
+
+### Backend (`backend/`)
+| Component | File Path | Description |
+| :--- | :--- | :--- |
+| **Celery Setup** | `erp/celery.py` | Celery application instance, broker configuration, and task auto-discovery. |
+| **Settings** | `erp/settings.py` | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, and `CELERY_BEAT_SCHEDULE`. |
+| **Celery Tasks** | `apps/healthcare/tasks.py` | `task_notify_lab_order_created`, `task_notify_lab_result_approved`, `task_check_unfulfilled_orders`. |
+| **Automation** | `apps/healthcare/automation.py` | Hooks `on_encounter_submit` and `on_lab_test_approve` that create records and dispatch tasks. |
+| **Real-time SSE** | `apps/healthcare/realtime.py` | Redis Pub/Sub broadcaster and `realtime_event_stream` SSE streaming endpoint. |
+| **Lab Dashboard API** | `apps/healthcare/views.py` | `LabDashboardViewSet` providing `/api/healthcare/lab-dashboard/stats/` (KPIs, TAT, 7-day trend series, specimen pipeline, worklists). |
+| **URLs** | `apps/healthcare/urls.py` | Endpoints `/api/healthcare/realtime/stream/`, `/api/healthcare/realtime/broadcast/`, and `/api/healthcare/lab-dashboard/stats/`. |
+| **Launcher 1** | `start-celery-worker.bat` | Batch script to launch Celery worker with solo pool on Windows. |
+| **Launcher 2** | `start-celery-beat.bat` | Batch script to launch Celery Beat periodic scheduler. |
+
+### Frontend (`slash-admin/`)
+| Component | File Path | Description |
+| :--- | :--- | :--- |
+| **Lab Dashboard** | `src/pages/healthcare/diagnostics/lab-dashboard.tsx` | Operational lab dashboard: STAT workbench, Accessioning bench, Verification queue, interactive charts, and quick-action modals. |
+| **Lab Nav Header** | `src/pages/healthcare/diagnostics/components/LabNavHeader.tsx` | Unified navigation tab bar for Diagnostics modules (Dashboard, Tests, Samples, Reports, Templates). |
+| **Realtime Hook** | `src/hooks/useRealtimeNotifications.ts` | Listens to SSE stream, displays Sonner toasts, updates badge store. |
+| **Global Mount** | `src/layouts/dashboard/index.tsx` | Mounts `useRealtimeNotifications()` so alerts work across all pages. |
+| **Notice Drawer** | `src/layouts/components/notice.tsx` | Added **Clinical** tab with unread count badge, clinical list, and direct links. |
+| **Notification Store** | `src/store/notificationStore.ts` | State for unread clinical notification counter. |
+| **Encounter Form** | `src/pages/healthcare/encounters/encounter-create.tsx` | Ordering UI for lab tests, procedures, and medications. |
+| **Lab Test Form** | `src/pages/healthcare/diagnostics/lab-test-form.tsx` | Result entry, **Approve** button, and **Notify Doctor & Patient** button. |
+| **Patient Profile** | `src/pages/healthcare/patients/patient-detail.tsx` | **Lab & Diagnostics** tab displaying test history and statuses. |
+
+---
+
+## 4. How to Run the System
+
+### Prerequisites
+Ensure Redis is running locally on Windows:
+```powershell
+# Default Redis port: 127.0.0.1:6379
+redis-server
+```
+
+### 1. Start Django Backend API
+```powershell
+cd C:\Users\robel\Desktop\ERP\backend
+python manage.py runserver 0.0.0.0:8000
+```
+
+### 2. Start Celery Worker (Asynchronous Task Processor)
+```powershell
+cd C:\Users\robel\Desktop\ERP\backend
+.\start-celery-worker.bat
+```
+*(Executes `celery -A erp worker -l info -P solo`)*
+
+### 3. Start Celery Beat (Periodic Scheduler)
+```powershell
+cd C:\Users\robel\Desktop\ERP\backend
+.\start-celery-beat.bat
+```
+*(Executes `celery -A erp beat -l info`)*
+
+### 4. Start Slash Admin Frontend
+```powershell
+cd C:\Users\robel\Desktop\ERP\slash-admin
+npm run dev
+```
+Navigate to `http://localhost:5173` to use the application.

@@ -1,0 +1,58 @@
+# ==============================================================================
+# Backend (.gitignore for Django / Python)
+# ==============================================================================
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and test outputs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Databases & runtime files (prevents large sqlite commits)
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Celery Beat schedule databases
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Media files
+media/attachments/*
+!media/attachments/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# IDE / OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

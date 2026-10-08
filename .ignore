@@ -1,0 +1,33 @@
+# ==============================================================================
+# Root .ignore for Healthcare Management System
+# (Mirroring .gitignore for tools supporting .ignore syntax)
+# ==============================================================================
+
+/*
+
+!/.gitignore
+!/.ignore
+!/README.md
+!/start-app.bat
+!/start-backend.sh
+!/start-frontend.sh
+!/work_flow
+
+!/backend/
+!/slash-admin/
+
+slash-admin/node_modules/
+slash-admin/dist/
+slash-admin/dist-ssr/
+slash-admin/*.local
+slash-admin/.env
+
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+**/__pycache__/
+**/*.py[cod]
+backend/db.sqlite3*
+backend/celerybeat-schedule*
+backend/.env

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>External Referral Out - {{ referral.referral_id }}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm 15mm 15mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: #64748b;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.45;
+      color: #0f172a;
+      background: #fff;
+    }
+
+    .referral-container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* ── Header ────────────────────────────────────── */
+    .header-table {
+      width: 100%;
+      border-bottom: 2.5px solid #1e3a8a;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .org-title {
+      font-size: 16pt;
+      font-weight: 800;
+      color: #1e3a8a;
+      letter-spacing: -0.3px;
+      text-transform: uppercase;
+    }
+
+    .org-subtitle {
+      font-size: 8.5pt;
+      color: #475569;
+      margin-top: 2px;
+    }
+
+    .doc-badge-container {
+      text-align: right;
+    }
+
+    .doc-main-badge {
+      display: inline-block;
+      background: #1e3a8a;
+      color: #fff;
+      font-size: 9pt;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .doc-meta {
+      font-size: 8.5pt;
+      color: #334155;
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    .priority-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 8pt;
+      text-transform: uppercase;
+    }
+    .priority-Routine { background: #e0f2fe; color: #0369a1; }
+    .priority-Urgent { background: #fef3c7; color: #b45309; }
+    .priority-Emergency { background: #fee2e2; color: #b91c1c; }
+
+    /* ── Routing Box (From / To) ──────────────────── */
+    .routing-grid {
+      width: 100%;
+      margin-bottom: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+    }
+
+    .routing-cell {
+      width: 50%;
+      vertical-align: top;
+      padding: 8px 12px;
+      background: #f8fafc;
+    }
+
+    .routing-cell.to-cell {
+      border-left: 1px solid #cbd5e1;
+      background: #f1f5f9;
+    }
+
+    .routing-label {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: #64748b;
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .routing-value-main {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .routing-detail {
+      font-size: 8.5pt;
+      color: #334155;
+      margin-top: 2px;
+    }
+
+    /* ── Patient Demographics Banner ──────────────── */
+    .patient-banner {
+      width: 100%;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+    }
+
+    .patient-banner table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .patient-banner td {
+      padding: 2px 6px;
+      font-size: 8.5pt;
+      vertical-align: top;
+    }
+
+    .patient-name-val {
+      font-size: 11pt;
+      font-weight: 800;
+      color: #1e3a8a;
+    }
+
+    .field-tag {
+      color: #64748b;
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    /* ── Clinical Sections ─────────────────────────── */
+    .section-title {
+      font-size: 9.5pt;
+      font-weight: 800;
+      color: #1e3a8a;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      padding-bottom: 3px;
+      border-bottom: 1.5px solid #94a3b8;
+      margin-top: 10px;
+      margin-bottom: 6px;
+    }
+
+    .content-box {
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      border-radius: 3px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      font-size: 9pt;
+      color: #1e293b;
+      min-height: 38px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
+    .content-box.highlight {
+      background: #fdfdfe;
+      border-color: #cbd5e1;
+    }
+
+    /* ── Endorsement / Signature Block ─────────────── */
+    .endorsement-table {
+      width: 100%;
+      margin-top: 16px;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 12px;
+    }
+
+    .endorsement-col {
+      width: 50%;
+      vertical-align: top;
+      padding-right: 15px;
+    }
+
+    .endorsement-col:last-child {
+      padding-right: 0;
+      padding-left: 15px;
+    }
+
+    .sig-line {
+      margin-top: 40px;
+      border-top: 1.5px solid #334155;
+      padding-top: 4px;
+      text-align: center;
+    }
+
+    .sig-name {
+      font-weight: 700;
+      font-size: 9.5pt;
+      color: #0f172a;
+    }
+
+    .sig-sub {
+      font-size: 8pt;
+      color: #64748b;
+    }
+
+    .stamp-box {
+      border: 1.5px dashed #94a3b8;
+      border-radius: 4px;
+      height: 70px;
+      text-align: center;
+      padding-top: 25px;
+      color: #94a3b8;
+      font-size: 8pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 10px;
+    }
+
+    /* ── Footer ────────────────────────────────────── */
+    .footer-note {
+      margin-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 6px;
+      font-size: 7.5pt;
+      color: #64748b;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="referral-container">
+  <!-- Top Header Table -->
+  <table class="header-table">
+    <tr>
+      <td style="vertical-align: top;">
+        <div class="org-title">{{ company|default:"Healthcare Center & Hospital" }}</div>
+        <div class="org-subtitle">Department of Clinical Services • Patient Referral & Continuity of Care</div>
+        <div class="org-subtitle">{{ facility_address|default:"General Hospital Way • Medical District" }} • Tel: {{ facility_phone|default:"+251-11-000-0000" }}</div>
+      </td>
+      <td class="doc-badge-container" style="vertical-align: top;">
+        <div class="doc-main-badge">External Referral Letter</div>
+        <div class="doc-meta">
+          <strong>Ref ID:</strong> {{ referral.referral_id }}<br>
+          <strong>Date:</strong> {{ referral.referral_date }}<br>
+          <strong>Priority:</strong>
+          <span class="priority-pill priority-{{ referral.priority }}">{{ referral.priority }}</span>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Routing Information (From / To) -->
+  <table class="routing-grid">
+    <tr>
+      <td class="routing-cell">
+        <div class="routing-label">Referring Practitioner & Facility (From)</div>
+        <div class="routing-value-main">Dr. {{ practitioner.practitioner_name|default:referral.referring_practitioner }}</div>
+        <div class="routing-detail"><strong>Department:</strong> {{ practitioner.department.department|default:"General Practice / Outpatient" }}</div>
+        <div class="routing-detail"><strong>Facility:</strong> {{ company|default:"Main Healthcare Center" }}</div>
+        <div class="routing-detail"><strong>Contact:</strong> {{ practitioner_phone|default:"+251-11-000-0000" }}</div>
+      </td>
+      <td class="routing-cell to-cell">
+        <div class="routing-label">Target Facility & Specialist (To)</div>
+        <div class="routing-value-main">{{ referral.target_facility }}</div>
+        <div class="routing-detail">
+          <strong>Receiving Specialist:</strong>
+          {{ referral.receiving_specialist|default:"Specialist-in-Charge / Department" }}
+        </div>
+        <div class="routing-detail"><strong>Care Continuity:</strong> External Consultation & Management</div>
+        <div class="routing-detail"><strong>Status:</strong> {{ referral.status|default:"Active" }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Patient Demographics Banner -->
+  <div class="patient-banner">
+    <table>
+      <tr>
+        <td style="width: 38%;">
+          <div class="field-tag">Patient Full Name</div>
+          <div class="patient-name-val">{{ patient.patient_name }}</div>
+        </td>
+        <td style="width: 18%;">
+          <div class="field-tag">MRN / Patient ID</div>
+          <div style="font-weight: 700; color: #0f172a;">{{ patient.patient_id|default:patient.id }}</div>
+        </td>
+        <td style="width: 16%;">
+          <div class="field-tag">Age / Gender</div>
+          <div style="font-weight: 600;">{{ patient.age_display|default:"N/A" }} / {{ patient.sex|default:"N/A" }}</div>
+        </td>
+        <td style="width: 28%;">
+          <div class="field-tag">Contact Phone / Address</div>
+          <div style="font-weight: 600;">{{ patient.mobile|default:"N/A" }}</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 1. Clinical Indication / Reason for Referral -->
+  <div class="section-title">1. Clinical Indication & Reason for Referral</div>
+  <div class="content-box highlight">
+{{ referral.clinical_indication|default:"Patient referred for specialized medical evaluation and therapeutic management." }}
+  </div>
+
+  <!-- 2. Provisional Diagnosis -->
+  <div class="section-title">2. Provisional Diagnosis / Working Clinical Assessment</div>
+  <div class="content-box">
+{{ referral.provisional_diagnosis|default:"Under clinical investigation." }}
+  </div>
+
+  <!-- 3. Current Treatment & Medications -->
+  <div class="section-title">3. Current Treatment & Medication Summary</div>
+  <div class="content-box">
+{{ referral.treatment_summary|default:"No prior medication given during this consultation." }}
+  </div>
+
+  <!-- 4. Relevant Diagnostic & Test Results -->
+  <div class="section-title">4. Relevant Diagnostic & Laboratory Test Results</div>
+  <div class="content-box">
+{{ referral.relevant_test_results|default:"Laboratory/diagnostic reports attached or pending external facility evaluation." }}
+  </div>
+
+  <!-- 5. Special Notes & Transport Precautions -->
+  {% if referral.referral_notes %}
+  <div class="section-title">5. Special Instructions & Precautions</div>
+  <div class="content-box">
+{{ referral.referral_notes }}
+  </div>
+  {% endif %}
+
+  <!-- Physician Endorsement and Destination Acknowledgement -->
+  <table class="endorsement-table">
+    <tr>
+      <td class="endorsement-col">
+        <div class="routing-label">Referring Medical Practitioner</div>
+        <div class="sig-line">
+          <div class="sig-name">Dr. {{ practitioner.practitioner_name|default:referral.referring_practitioner }}</div>
+          <div class="sig-sub">Authorized Medical Signature & License No.</div>
+          <div class="sig-sub">Date: {{ referral.referral_date }}</div>
+        </div>
+        <div class="stamp-box">
+          Official Clinic / Hospital Stamp
+        </div>
+      </td>
+      <td class="endorsement-col">
+        <div class="routing-label">Receiving Facility Acknowledgement</div>
+        <div class="sig-line">
+          <div class="sig-name">______________________________________</div>
+          <div class="sig-sub">Receiving Physician / Triage Nurse Signature</div>
+          <div class="sig-sub">Date & Time Received: _____ / _____ / 202___  ____:____</div>
+        </div>
+        <div class="stamp-box">
+          Receiving Facility Receiving Stamp
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Confidentiality Notice Footer -->
+  <div class="footer-note">
+    <strong>CONFIDENTIAL MEDICAL COMMUNICATION:</strong> The medical information contained in this referral letter is confidential and intended solely for the use of the healthcare practitioners at {{ referral.target_facility }}. If you have received this document in error, please notify the referring institution immediately and return or securely destroy this document.
+  </div>
+</div>
+
+</body>
+</html>

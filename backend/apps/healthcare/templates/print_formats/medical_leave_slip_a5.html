@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Medical Leave Certificate - {{ slip.slip_id }}</title>
+  <style>
+    @page {
+      size: A5 portrait;
+      margin: 8mm 10mm 10mm 10mm;
+      @bottom-center {
+        content: "Valid only with original physician signature and official clinic stamp";
+        font-size: 7pt;
+        color: #94a3b8;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8.5pt;
+      line-height: 1.4;
+      color: #0f172a;
+      background: #fff;
+    }
+
+    /* ── Outer Certificate Frame ──────────────────── */
+    .certificate-frame {
+      border: 2px solid #0f172a;
+      outline: 1px solid #94a3b8;
+      outline-offset: 3px;
+      padding: 10px 12px;
+      border-radius: 4px;
+      background: #ffffff;
+    }
+
+    /* ── Header ────────────────────────────────────── */
+    .cert-header {
+      text-align: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+
+    .cert-facility-name {
+      font-size: 13pt;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .cert-facility-sub {
+      font-size: 7.5pt;
+      color: #475569;
+      margin-top: 1px;
+    }
+
+    .cert-title-badge {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 3px 14px;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 9.5pt;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-radius: 2px;
+    }
+
+    .cert-meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: #334155;
+      margin-top: 6px;
+      padding: 0 4px;
+    }
+
+    /* ── Patient Statement ─────────────────────────── */
+    .statement-para {
+      font-size: 8.5pt;
+      line-height: 1.5;
+      margin-bottom: 10px;
+      text-align: justify;
+      color: #1e293b;
+    }
+
+    .patient-highlight {
+      font-weight: 700;
+      color: #0f172a;
+      border-bottom: 1px solid #cbd5e1;
+      padding: 0 3px;
+    }
+
+    /* ── Diagnosis Box ─────────────────────────────── */
+    .field-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin-bottom: 9px;
+    }
+
+    .field-label {
+      font-size: 7pt;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .diagnosis-text {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* ── Leave Period Banner ───────────────────────── */
+    .period-card {
+      background: #eff6ff;
+      border: 1.5px solid #3b82f6;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-bottom: 9px;
+    }
+
+    .period-grid {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: center;
+    }
+
+    .period-grid td {
+      padding: 2px 4px;
+      vertical-align: middle;
+    }
+
+    .period-label {
+      font-size: 7pt;
+      font-weight: 700;
+      color: #1e40af;
+      text-transform: uppercase;
+    }
+
+    .period-val {
+      font-size: 10pt;
+      font-weight: 800;
+      color: #1e3a8a;
+    }
+
+    .total-days-badge {
+      display: inline-block;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 10pt;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Fitness & Remarks ─────────────────────────── */
+    .fitness-grid {
+      width: 100%;
+      margin-bottom: 9px;
+    }
+
+    .fitness-grid td {
+      vertical-align: top;
+      padding: 0 4px;
+    }
+
+    .fitness-status-val {
+      font-size: 9pt;
+      font-weight: 700;
+      color: #b91c1c;
+    }
+
+    .fitness-status-val.fit {
+      color: #15803d;
+    }
+
+    .remarks-box {
+      font-size: 8pt;
+      color: #334155;
+      min-height: 24px;
+      white-space: pre-wrap;
+    }
+
+    /* ── Signatures & Stamp ────────────────────────── */
+    .sig-section {
+      width: 100%;
+      margin-top: 10px;
+      border-top: 1px solid #cbd5e1;
+      padding-top: 8px;
+    }
+
+    .sig-section td {
+      width: 50%;
+      vertical-align: top;
+      padding: 0 6px;
+    }
+
+    .sig-line {
+      margin-top: 36px;
+      border-top: 1.5px solid #0f172a;
+      padding-top: 3px;
+      text-align: center;
+    }
+
+    .doctor-name {
+      font-size: 9pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .doctor-title {
+      font-size: 7.5pt;
+      color: #64748b;
+    }
+
+    .seal-box {
+      border: 1.5px dashed #94a3b8;
+      border-radius: 4px;
+      height: 60px;
+      text-align: center;
+      padding-top: 22px;
+      color: #94a3b8;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 6px;
+    }
+
+    /* ── Certification Disclaimer ──────────────────── */
+    .disclaimer {
+      font-size: 6.5pt;
+      color: #64748b;
+      text-align: center;
+      margin-top: 8px;
+      border-top: 1px dotted #cbd5e1;
+      padding-top: 4px;
+      line-height: 1.3;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="certificate-frame">
+  <!-- Header -->
+  <div class="cert-header">
+    <div class="cert-facility-name">{{ company|default:"Healthcare Center & Hospital" }}</div>
+    <div class="cert-facility-sub">Medical Services & Occupational Health Department</div>
+    <div class="cert-facility-sub">{{ facility_address|default:"General Hospital Way • Medical District" }} • Tel: {{ facility_phone|default:"+251-11-000-0000" }}</div>
+    <div class="cert-title-badge">Medical Leave / Sick Leave Certificate</div>
+    <div class="cert-meta-row">
+      <span><strong>Certificate No:</strong> {{ slip.slip_id }}</span>
+      <span><strong>Date of Examination & Issue:</strong> {{ slip.issue_date }}</span>
+    </div>
+  </div>
+
+  <!-- Patient Certification Statement -->
+  <p class="statement-para">
+    This is to certify that
+    <span class="patient-highlight">{{ patient.patient_name }}</span>,
+    MRN / ID: <span class="patient-highlight">{{ patient.patient_id|default:patient.id }}</span>,
+    Age: <span class="patient-highlight">{{ patient.age_display|default:"N/A" }}</span>,
+    Gender: <span class="patient-highlight">{{ patient.sex|default:"N/A" }}</span>,
+    attended this healthcare facility for clinical consultation and was duly examined by the undersigned medical practitioner.
+  </p>
+
+  <!-- Diagnosis Section -->
+  <div class="field-card">
+    <div class="field-label">Clinical Diagnosis / Medical Reason</div>
+    <div class="diagnosis-text">{{ slip.diagnosis }}</div>
+  </div>
+
+  <!-- Recommended Leave Period (High Prominence) -->
+  <div class="period-card">
+    <table class="period-grid">
+      <tr>
+        <td style="width: 32%;">
+          <div class="period-label">Rest Commencing From</div>
+          <div class="period-val">{{ slip.from_date }}</div>
+        </td>
+        <td style="width: 8%; font-size: 14pt; font-weight: 700; color: #3b82f6;">➔</td>
+        <td style="width: 32%;">
+          <div class="period-label">Rest Concluding On</div>
+          <div class="period-val">{{ slip.to_date }}</div>
+        </td>
+        <td style="width: 28%;">
+          <div class="period-label">Total Duration</div>
+          <div class="total-days-badge">{{ slip.total_days }} Day{% if slip.total_days > 1 %}s{% endif %}</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Fitness & Doctor Remarks Grid -->
+  <table class="fitness-grid">
+    <tr>
+      <td style="width: 50%;">
+        <div class="field-card" style="margin-bottom: 0;">
+          <div class="field-label">Fitness to Resume Duty / School</div>
+          <div class="fitness-status-val {% if slip.fitness_state == 'Fit for Normal Duties' %}fit{% endif %}">
+            {{ slip.fitness_state|default:"Unfit for Work / School" }}
+          </div>
+          <div style="font-size: 7.5pt; color: #475569; margin-top: 3px;">
+            Expected Fit Date: <strong>{{ slip.fit_to_work_date|default:"Upon completion of leave" }}</strong>
+          </div>
+        </div>
+      </td>
+      <td style="width: 50%;">
+        <div class="field-card" style="margin-bottom: 0;">
+          <div class="field-label">Physician Remarks / Instructions</div>
+          <div class="remarks-box">{{ slip.doctor_remarks|default:"Strict bed rest recommended. Follow medication schedule." }}</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Practitioner Endorsement & Clinic Seal -->
+  <table class="sig-section">
+    <tr>
+      <td>
+        <div class="sig-line">
+          <div class="doctor-name">Dr. {{ practitioner.practitioner_name|default:slip.practitioner|default:"Attending Physician" }}</div>
+          <div class="doctor-title">{{ practitioner.designation|default:"Licensed Medical Practitioner" }}</div>
+          <div class="doctor-title">Medical Registration / License Verified</div>
+        </div>
+      </td>
+      <td>
+        <div class="seal-box">
+          Official Clinic / Hospital Stamp & Seal
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Formal Validation Disclaimer -->
+  <div class="disclaimer">
+    <strong>NOTICE TO EMPLOYER / ACADEMIC INSTITUTION:</strong> This document certifies that the patient is medically incapacitated for the stated duration. Any unauthorized erasure, correction, or alteration renders this certificate null and void.
+  </div>
+</div>
+
+</body>
+</html>

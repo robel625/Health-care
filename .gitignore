@@ -1,0 +1,103 @@
+# ==============================================================================
+# Root .gitignore for Healthcare Management System
+# Ignores all files/folders EXCEPT slash-admin, backend, and project root docs/scripts
+# ==============================================================================
+
+# 1. Ignore everything in the root by default
+/*
+
+# 2. Allow repository configuration and documentation files
+!/.gitignore
+!/.ignore
+!/README.md
+!/start-app.bat
+!/start-backend.sh
+!/start-frontend.sh
+!/work_flow
+
+# 3. Whitelist active project directories
+!/backend/
+!/slash-admin/
+
+# ==============================================================================
+# Frontend Rules (slash-admin)
+# ==============================================================================
+slash-admin/node_modules/
+slash-admin/.pnp
+slash-admin/.pnp.js
+slash-admin/dist/
+slash-admin/dist-ssr/
+slash-admin/*.local
+slash-admin/stats.html
+
+# Frontend environment files
+slash-admin/.env
+slash-admin/.env.local
+slash-admin/.env.development.local
+slash-admin/.env.test.local
+slash-admin/.env.production.local
+!slash-admin/.env.example
+
+# Frontend logs
+slash-admin/logs/
+slash-admin/*.log
+slash-admin/npm-debug.log*
+slash-admin/yarn-debug.log*
+slash-admin/yarn-error.log*
+slash-admin/pnpm-debug.log*
+slash-admin/lerna-debug.log*
+
+# ==============================================================================
+# Backend Rules (Django / Python)
+# ==============================================================================
+# Virtual environments
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+backend/env.bak/
+backend/venv.bak/
+
+# Python bytecode & cache
+**/__pycache__/
+**/*.py[cod]
+backend/*$py.class
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+
+# SQLite Database and WAL files (protects against committing large database files)
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/db.sqlite3-shm
+backend/db.sqlite3-wal
+
+# Celery Beat schedule databases
+backend/celerybeat-schedule
+backend/celerybeat-schedule.db
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal
+
+# Backend environment and secrets
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Media and user uploads
+backend/media/attachments/*
+!backend/media/attachments/.gitkeep
+
+# Backend logs
+backend/*.log
+backend/logs/
+
+# ==============================================================================
+# OS & Editor Files
+# ==============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo

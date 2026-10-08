@@ -1,0 +1,512 @@
+/**
+ * ══════════════════════════════════════════════════════════════════════════
+ * ENTERPRISE & CLINICAL PRINT STYLESHEET (@media print)
+ * ══════════════════════════════════════════════════════════════════════════
+ * Optimizes web applications and medical EHR records for physical paper
+ * printing, PDF export, thermal receipt slips, and specimen labels.
+ *
+ * Core Features:
+ *  1. Paper Sizing & Margins (A4, Letter, Landscape, Thermal, Specimen)
+ *  2. Screen UI De-cluttering (Hides navbars, sidebars, buttons, overlays)
+ *  3. Layout, Overflow & Grid Resets (Eliminates clipping & scroll locks)
+ *  4. Ink & Color Optimization (High-contrast text, ink-saving backgrounds)
+ *  5. Crisp B&W Border & Badge Rendering (Remains sharp without color ink)
+ *  6. Pagination & Break Controls (Prevents split tables, cards, & signatures)
+ *  7. Modal / Dialog Print Isolation (Automatically detects active print modals)
+ *  8. Clinical Print Utilities (Letterheads, signatures, barcodes, page counters)
+ * ══════════════════════════════════════════════════════════════════════════
+ */
+
+/* ──────────────────────────────────────────────────────────────────────────
+   1. SCREEN DEFAULTS FOR PRINT HELPERS
+   Ensure print-only containers stay hidden on standard screen displays
+   ────────────────────────────────────────────────────────────────────────── */
+.print-only,
+.print-header,
+.print-footer,
+.print-watermark,
+.print-signature-block {
+  display: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   2. GLOBAL PRINT MEDIA DIRECTIVES
+   ────────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* ── 2.1 Paper Dimensions & Margin Standard ────────────────────────── */
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm 15mm 15mm;
+  }
+
+  /* Support for Landscape Document Classes */
+  @page landscape-document {
+    size: A4 landscape;
+    margin: 10mm 12mm 12mm 12mm;
+  }
+
+  /* Support for US Letter Paper Format */
+  @page letter-document {
+    size: letter portrait;
+    margin: 0.5in 0.6in 0.6in 0.6in;
+  }
+
+  /* Support for Thermal POS Dispensary Receipts (80mm) */
+  @page thermal-slip {
+    size: 80mm auto;
+    margin: 3mm 4mm;
+  }
+
+  /* Support for Specimen Tube / Pharmacy Box Labels (50mm x 25mm) */
+  @page specimen-label {
+    size: 50mm 25mm;
+    margin: 1mm 2mm;
+  }
+
+  /* Modern Page Numbering Support (Chromium & Paged Media) */
+  @page {
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8pt;
+      color: #64748b;
+    }
+  }
+
+  /* ── 2.2 Color & Ink Optimization Foundation ───────────────────────── */
+  *,
+  *::before,
+  *::after {
+    /* Strip dark, heavy backgrounds to conserve ink and prevent muddy printouts */
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    /* Smooth anti-aliased font rendering for print */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Clean base background and high-contrast typography */
+  html,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #111827 !important; /* High-contrast slate-900 / pure dark */
+    font-size: 10pt;
+    line-height: 1.4;
+    width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure text elements are strictly dark and legible */
+  body, p, span, li, td, th, div, label, input, textarea {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+  }
+
+  /* Preserve essential clinical highlights, badges, and brand identities */
+  .print-color-exact,
+  .print-preserve-color,
+  [data-slot="badge"],
+  .badge,
+  .status-pill,
+  .clinical-badge,
+  img,
+  svg {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Crisp B&W border enhancement for badges and tags */
+  [data-slot="badge"],
+  .badge,
+  .status-pill {
+    border: 1px solid #374151 !important;
+    background-color: #f3f4f6 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Crisp borders for cards, boxes, and rules */
+  .border,
+  [class*="border-"],
+  hr {
+    border-color: #d1d5db !important;
+  }
+
+  /* ── 2.3 UI Cleanup (Hide Screen Chrome & Interactive Controls) ─────── */
+  header,
+  nav,
+  aside,
+  footer,
+  [data-slot="slash-layout-root"] > nav,
+  [data-slot="slash-layout-multi-tabs"],
+  [data-slot="sidebar"],
+  nav[aria-label="breadcrumb"],
+  .multi-tabs,
+  .breadcrumb,
+  .print\:hidden,
+  .print-hidden,
+  .screen-only,
+  .no-print,
+  [data-screen-only],
+  /* Interactive Controls */
+  button:not(.print-keep-btn),
+  [role="button"],
+  .btn:not(.print-keep-btn),
+  /* Popovers, Tooltips & Overlays */
+  [data-radix-popper-content-wrapper],
+  [data-radix-dropdown-menu-content],
+  [data-radix-select-content],
+  [data-radix-tooltip-content],
+  .tooltip,
+  /* Notification Toasts */
+  [data-sonner-toaster],
+  .toast,
+  /* Search bars, filters, and pagination toolbars */
+  .search-toolbar,
+  .pagination-container,
+  /* Backdrops */
+  .fixed.inset-0.bg-black\/80,
+  [data-radix-dialog-overlay] {
+    display: none !important;
+  }
+
+  /* ── 2.4 Layout & Alignment Resets (Remove Scroll Locks & Offsets) ──── */
+  #root,
+  [data-slot="slash-layout-root"],
+  [data-slot="slash-layout-main"],
+  main,
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto,
+  .max-h-\[90vh\],
+  .max-h-screen {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    position: static !important;
+    transform: none !important;
+  }
+
+  /* Reset layout sidebar padding offset (mainPaddingLeft from PcVerticalLayout) */
+  [data-slot="slash-layout-root"] > div {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* ── 2.5 Multi-Column Grid Flattening for Paper Dimensions ──────────── */
+  /* Screen grids with 3+ columns often truncate content on standard A4 paper width */
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5,
+  .grid-cols-6,
+  .grid-cols-12 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8pt !important;
+  }
+
+  /* Single column print utility */
+  .print-grid-1 {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8pt !important;
+  }
+
+  /* Two column balanced print utility */
+  .print-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12pt !important;
+  }
+
+  /* Three column compact print utility */
+  .print-grid-3 {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8pt !important;
+  }
+
+  /* ── 2.6 Tables & Tabular Clinical Records ──────────────────────────── */
+  table {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    table-layout: auto !important;
+    font-size: 8.5pt !important;
+    margin: 8pt 0 !important;
+    page-break-inside: auto;
+  }
+
+  /* Repeat table headers on every new printed page */
+  thead {
+    display: table-header-group !important;
+  }
+
+  /* Repeat table footers if used */
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  /* Prevent awkward split rows across paper boundaries */
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th,
+  td {
+    padding: 4pt 6pt !important;
+    border: 1px solid #d1d5db !important;
+    text-align: left;
+    vertical-align: top;
+    word-break: break-word;
+  }
+
+  th {
+    font-weight: 700 !important;
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+    border-bottom: 2px solid #374151 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── 2.7 Pagination & Page Break Controls ───────────────────────────── */
+  /* Prevent splitting cards, vitals panels, test results, and signature blocks */
+  .print-avoid-break,
+  .no-break,
+  .keep-together,
+  .card,
+  [data-slot="card"],
+  .clinical-card,
+  .timeline-card,
+  figure,
+  blockquote,
+  .signature-block,
+  .prescription-slip,
+  .lab-test-panel {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Force page breaks when needed */
+  .print-break-before,
+  .page-break-before {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  .print-break-after,
+  .page-break-after {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
+  /* Prevent orphan and widow lines */
+  p,
+  li,
+  blockquote {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Prevent headings from being stranded at the bottom of a page */
+  h1, h2, h3, h4, h5, h6 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* ── 2.8 Forms, Inputs & Textareas Transformation ───────────────────── */
+  /* Render interactive form fields as clean bordered printable fields */
+  input,
+  textarea,
+  select {
+    border: none !important;
+    border-bottom: 1px solid #6b7280 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 2pt 0 !important;
+    font-size: 9.5pt !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+  }
+
+  /* Checkbox & radio visual preservation */
+  input[type="checkbox"],
+  input[type="radio"] {
+    border: 1px solid #111827 !important;
+    display: inline-block !important;
+    width: 12pt !important;
+    height: 12pt !important;
+    margin-right: 4pt !important;
+  }
+
+  /* ── 2.9 Hyperlinks Cleanup ─────────────────────────────────────────── */
+  /* Avoid printing useless screen URLs or JS hashes */
+  a {
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+
+  /* Only display URLs when explicitly requested on an anchor or container */
+  .print-show-urls a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 7.5pt;
+    color: #4b5563;
+  }
+
+  /* ── 2.10 Modal / Dialog Print Isolation ────────────────────────────── */
+  /* If a modal is open when window.print() is called, isolate only the modal */
+  body:has([role="dialog"]) > *:not([role="dialog"]) {
+    display: none !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    width: 100% !important;
+  }
+
+  /* Specific registered clinical print sections */
+  #prescription-print-area,
+  #external-referral-print-area,
+  #medical-leave-print-area,
+  #dispense-receipt-print-area,
+  #lab-report-print-area,
+  #specimen-label-print-area,
+  .printable-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  /* ── 2.11 Advanced Print Utilities ──────────────────────────────────── */
+
+  /* Print-only elements become visible */
+  .print-only {
+    display: block !important;
+  }
+
+  .print-inline {
+    display: inline !important;
+  }
+
+  .print-flex {
+    display: flex !important;
+  }
+
+  /* Official Hospital / Enterprise Print Header */
+  .print-header {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid #111827;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+    break-after: avoid !important;
+  }
+
+  /* Official Confidentiality & Audit Print Footer */
+  .print-footer {
+    display: block !important;
+    margin-top: 18pt;
+    padding-top: 8pt;
+    border-top: 1px solid #94a3b8;
+    font-size: 7.5pt;
+    color: #64748b;
+    break-before: avoid !important;
+  }
+
+  /* Physician / Official Signature Block */
+  .print-signature-block {
+    display: block !important;
+    margin-top: 24pt;
+    break-inside: avoid !important;
+  }
+
+  .print-signature-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 32pt !important;
+  }
+
+  .print-signature-line {
+    border-bottom: 1px solid #111827 !important;
+    height: 36pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  /* High-Resolution Barcode / QR Code Rendering */
+  .print-barcode,
+  .print-qr {
+    image-rendering: -webkit-optimize-contrast !important;
+    image-rendering: crisp-edges !important;
+    image-rendering: pixelated !important;
+    max-width: 100% !important;
+  }
+
+  /* Thermal Receipt Mode (POS Slip Printing for Pharmacy Dispensing) */
+  .thermal-receipt {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 auto !important;
+    padding: 4mm 2mm !important;
+    font-size: 8pt !important;
+    line-height: 1.25 !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  }
+
+  .thermal-receipt * {
+    font-size: 8pt !important;
+  }
+
+  .thermal-receipt h1,
+  .thermal-receipt h2 {
+    font-size: 10.5pt !important;
+    text-align: center !important;
+  }
+
+  /* Specimen Label Mode (Tubes, Slides, Pharmacy Bottles) */
+  .specimen-label {
+    width: 48mm !important;
+    max-width: 48mm !important;
+    height: 23mm !important;
+    margin: 0 auto !important;
+    padding: 1.5mm !important;
+    font-size: 6.5pt !important;
+    line-height: 1.15 !important;
+    overflow: hidden !important;
+    break-inside: avoid !important;
+  }
+}

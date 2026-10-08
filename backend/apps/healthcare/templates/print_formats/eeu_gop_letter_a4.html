@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EEU Guarantee of Payment - {{ referral.eeu_gop_authorization_code|default:referral.referral_id }}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 15mm 18mm 18mm 18mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 8pt;
+        color: #64748b;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.5;
+      color: #0f172a;
+      background: #fff;
+    }
+
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .header-table {
+      width: 100%;
+      border-bottom: 3px solid #059669;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+
+    .org-title {
+      font-size: 15pt;
+      font-weight: 800;
+      color: #065f46;
+      letter-spacing: -0.3px;
+      text-transform: uppercase;
+    }
+
+    .org-subtitle {
+      font-size: 9pt;
+      color: #334155;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .org-address {
+      font-size: 8pt;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .doc-meta {
+      text-align: right;
+    }
+
+    .doc-badge {
+      display: inline-block;
+      background: #059669;
+      color: #fff;
+      font-size: 9pt;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .meta-line {
+      font-size: 8.5pt;
+      color: #334155;
+      margin-top: 4px;
+    }
+
+    /* ── Recipient Box ── */
+    .recipient-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      background: #f8fafc;
+    }
+
+    .recipient-title {
+      font-size: 8pt;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.5px;
+    }
+
+    .recipient-name {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 2px;
+    }
+
+    /* ── Guarantee Statement ── */
+    .gop-banner {
+      background: #ecfdf5;
+      border: 1.5px solid #10b981;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+
+    .gop-banner h3 {
+      font-size: 10pt;
+      font-weight: 800;
+      color: #065f46;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+
+    .gop-banner p {
+      font-size: 9pt;
+      color: #047857;
+      line-height: 1.45;
+    }
+
+    /* ── Details Grid ── */
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+
+    .details-table th, .details-table td {
+      border: 1px solid #e2e8f0;
+      padding: 7px 10px;
+      font-size: 9pt;
+    }
+
+    .details-table th {
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 700;
+      width: 28%;
+      text-align: left;
+    }
+
+    .amount-highlight {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #059669;
+      font-family: monospace;
+    }
+
+    /* ── Sign-off ── */
+    .signoff-table {
+      width: 100%;
+      margin-top: 30px;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 20px;
+    }
+
+    .signature-line {
+      border-top: 1px solid #0f172a;
+      width: 220px;
+      margin-top: 45px;
+      padding-top: 4px;
+      font-size: 8pt;
+      color: #475569;
+    }
+
+    .seal-box {
+      border: 2px dashed #94a3b8;
+      width: 130px;
+      height: 90px;
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <table class="header-table">
+      <tr>
+        <td style="vertical-align: top;">
+          <div class="org-title">{{ company }}</div>
+          <div class="org-subtitle">{{ directorate }}</div>
+          <div class="org-address">{{ facility_address }} • Phone: {{ facility_phone }}</div>
+        </td>
+        <td class="doc-meta" style="vertical-align: top;">
+          <div class="doc-badge">Guarantee of Payment</div>
+          <div class="meta-line"><strong>Auth Code:</strong> {{ referral.eeu_gop_authorization_code|default:"EEU-GOP-2026-ACTIVE" }}</div>
+          <div class="meta-line"><strong>Date:</strong> {{ referral.referral_date|date:"F d, Y" }}</div>
+          <div class="meta-line"><strong>Priority:</strong> {{ referral.priority|upper }}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Target Facility Box -->
+    <div class="recipient-box">
+      <div class="recipient-title">To Medical Director / Billing & Admissions Department:</div>
+      <div class="recipient-name">{{ referral.target_facility }}</div>
+      <div style="font-size: 9pt; color: #475569; margin-top: 2px;">
+        Attn: {{ referral.receiving_specialist|default:"Specialized Emergency / Trauma Admissions" }}
+      </div>
+    </div>
+
+    <!-- Official Guarantee Statement -->
+    <div class="gop-banner">
+      <h3>Official Corporate Billing Guarantee</h3>
+      <p>
+        The <strong>Ethiopian Electric Utility (EEU)</strong> Health Services Directorate hereby formally confirms medical guarantee of payment for the below-named employee / eligible beneficiary for necessary emergency care, inpatient treatment, and specialized procedures up to the authorized financial ceiling.
+      </p>
+    </div>
+
+    <!-- Patient & Coverage Details -->
+    <table class="details-table">
+      <tr>
+        <th>Beneficiary / Patient Name</th>
+        <td><strong>{{ patient.patient_name }}</strong></td>
+      </tr>
+      <tr>
+        <th>EEU Staff ID / Payroll Code</th>
+        <td style="font-family: monospace; font-weight: bold;">{{ patient.eeu_staff_id|default:"EEU-PRIMARY-BENEFICIARY" }}</td>
+      </tr>
+      <tr>
+        <th>Beneficiary Category</th>
+        <td>{{ patient.eeu_beneficiary_type|default:"Staff" }} ({{ patient.sex }} • Age {{ patient.age_display|default:patient.age }})</td>
+      </tr>
+      <tr>
+        <th>Directorate & Workstation</th>
+        <td>{{ patient.eeu_department|default:"Distribution Directorate" }} • {{ patient.eeu_work_station|default:patient.eeu_region }}</td>
+      </tr>
+      <tr>
+        <th>Authorized Billing Ceiling</th>
+        <td class="amount-highlight">
+          ETB {{ referral.eeu_gop_authorized_amount_etb|default:"25,000.00" }}
+        </td>
+      </tr>
+      <tr>
+        <th>Scope of Authorized Care</th>
+        <td>{{ referral.eeu_gop_coverage_scope|default:"Emergency Inpatient & Specialized Surgical Care" }}</td>
+      </tr>
+      <tr>
+        <th>Provisional Diagnosis / Reason</th>
+        <td>{{ referral.provisional_diagnosis|default:referral.clinical_indication }}</td>
+      </tr>
+      <tr>
+        <th>Clinical Transfer Summary</th>
+        <td>{{ referral.treatment_summary|default:"Patient referred for urgent tertiary specialized clinical management." }}</td>
+      </tr>
+      <tr>
+        <th>Direct Invoicing Instructions</th>
+        <td style="font-size: 8.5pt; color: #334155;">
+          Please invoice directly to: <em>EEU Health Services Directorate, De Gaulle Square, P.O. Box 1233, Addis Ababa</em>, citing Authorization Code <strong>{{ referral.eeu_gop_authorization_code|default:"EEU-GOP-2026-ACTIVE" }}</strong> and original itemized hospital bills.
+        </td>
+      </tr>
+    </table>
+
+    <!-- Signatures -->
+    <table class="signoff-table">
+      <tr>
+        <td style="width: 50%; vertical-align: bottom;">
+          <div class="signature-line">
+            <strong>{{ practitioner.practitioner_name|default:"Attending Medical Officer" }}</strong><br>
+            {{ practitioner.designation|default:"Occupational Medical Officer" }}<br>
+            License: {{ practitioner.practitioner_id|default:"EEU-MD-0841" }}
+          </div>
+        </td>
+        <td style="width: 50%; vertical-align: bottom;">
+          <div class="seal-box">
+            EEU Health Directorate Official Seal & Verification
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

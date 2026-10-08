@@ -1,0 +1,234 @@
+import { Suspense, lazy } from "react";
+import type { RouteObject } from "react-router";
+
+const ErpGuide = lazy(() => import("@/pages/erp/guide"));
+const UserProfile = lazy(() => import("@/pages/management/user/profile"));
+const UserAccount = lazy(() => import("@/pages/management/user/account"));
+const RolesPage = lazy(() => import("@/pages/erp/roles/index.tsx"));
+const UserRolesPage = lazy(() => import("@/pages/erp/roles/user-roles"));
+const PermissionMatrixPage = lazy(() => import("@/pages/erp/roles/permission-matrix"));
+const DocTypesPage = lazy(() => import("@/pages/erp/roles/doctypes"));
+const CommentsPage = lazy(() => import("@/pages/erp/comments"));
+const CommunicationsPage = lazy(() => import("@/pages/erp/communications"));
+const ErrorLogsPage = lazy(() => import("@/pages/erp/error-logs"));
+const ScheduledJobsPage = lazy(() => import("@/pages/erp/scheduled-jobs"));
+const PermissionInspectorPage = lazy(() => import("@/pages/erp/roles/permission-inspector"));
+const UserPermissionsPage = lazy(() => import("@/pages/erp/roles/user-permissions"));
+const DocSharesPage = lazy(() => import("@/pages/erp/roles/doc-shares"));
+const ServerScriptsPage = lazy(() => import("@/pages/erp/roles/server-scripts"));
+const DataImportExportPage = lazy(() => import("@/pages/erp/roles/data-import-export"));
+const NamingRulesPage = lazy(() => import("@/pages/erp/roles/naming-rules"));
+const BulkMessagingPage = lazy(() => import("@/pages/erp/roles/bulk-messaging"));
+const WorkflowDesignerPage = lazy(() => import("@/pages/erp/roles/workflow-designer"));
+const EmailTemplatesPage = lazy(() => import("@/pages/erp/roles/email-templates"));
+const SystemSettingsPage = lazy(() => import("@/pages/erp/roles/system-settings"));
+const NotificationSettingsPage = lazy(() => import("@/pages/erp/roles/notification-settings"));
+const NotificationDeliveryLogPage = lazy(() => import("@/pages/erp/roles/notification-delivery-log"));
+const UserNotificationPrefsPage = lazy(() => import("@/pages/erp/roles/user-notification-prefs"));
+const EmailAccountsPage = lazy(() => import("@/pages/erp/roles/email-accounts"));
+const UserManagementPage = lazy(() => import("@/pages/erp/roles/user-management"));
+const UserListPage = lazy(() => import("@/pages/erp/roles/user-list"));
+const RoleManagementPage = lazy(() => import("@/pages/erp/roles/role-management"));
+
+// Healthcare
+const HealthcareDashboard = lazy(() => import("@/pages/healthcare/index"));
+const HealthcarePatients = lazy(() => import("@/pages/healthcare/patients/patients"));
+const HealthcarePatientDetail = lazy(() => import("@/pages/healthcare/patients/patient-detail"));
+const HealthcarePatientCreate = lazy(() => import("@/pages/healthcare/patients/patient-create"));
+const HealthcarePatientHistory = lazy(() => import("@/pages/healthcare/patients/patient-history"));
+const HealthcarePractitioners = lazy(() => import("@/pages/healthcare/practitioners/practitioners"));
+const HealthcarePractitionerDetail = lazy(() => import("@/pages/healthcare/practitioners/practitioner-detail"));
+const HealthcarePractitionerCreate = lazy(() => import("@/pages/healthcare/practitioners/practitioner-create"));
+const HealthcarePractitionerSchedule = lazy(() => import("@/pages/healthcare/practitioners/practitioner-schedule"));
+const HealthcareAppointments = lazy(() => import("@/pages/healthcare/appointments/appointments"));
+const HealthcareAppointmentDetail = lazy(() => import("@/pages/healthcare/appointments/appointment-detail"));
+const HealthcareEncounters = lazy(() => import("@/pages/healthcare/encounters/encounters"));
+const HealthcareEncounterDetail = lazy(() => import("@/pages/healthcare/encounters/encounter-detail"));
+const HealthcareEncounterCreate = lazy(() => import("@/pages/healthcare/encounters/encounter-create"));
+const HealthcareExternalReferralCreate = lazy(() => import("@/pages/healthcare/encounters/external-referral-create"));
+const HealthcareMedicalLeaveCreate = lazy(() => import("@/pages/healthcare/encounters/medical-leave-create"));
+const HealthcareLabDashboard = lazy(() => import("@/pages/healthcare/diagnostics/lab-dashboard"));
+const HealthcareLabTests = lazy(() => import("@/pages/healthcare/diagnostics/lab-tests"));
+const HealthcareTherapy = lazy(() => import("@/pages/healthcare/clinical/therapy"));
+const HealthcareTreatmentPlanTemplates = lazy(() => import("@/pages/healthcare/clinical/treatment-plan-templates"));
+const HealthcareTreatmentPlanTemplateDetail = lazy(() => import("@/pages/healthcare/clinical/treatment-plan-template-detail"));
+const HealthcareInpatient = lazy(() => import("@/pages/healthcare/inpatient/inpatient"));
+const HealthcareInsurance = lazy(() => import("@/pages/healthcare/billing/insurance"));
+const HealthcareDepartments = lazy(() => import("@/pages/healthcare/reference/departments"));
+const HealthcareVitalSigns = lazy(() => import("@/pages/healthcare/clinical/vital-signs"));
+const HealthcareVitalSignsDetail = lazy(() => import("@/pages/healthcare/clinical/vital-signs-detail"));
+const HealthcarePrescriptions = lazy(() => import("@/pages/healthcare/clinical/prescriptions"));
+const HealthcareEmergency = lazy(() => import("@/pages/healthcare/inpatient/emergency"));
+const HealthcareMedications = lazy(() => import("@/pages/healthcare/reference/medications"));
+const HealthcareAllergies = lazy(() => import("@/pages/healthcare/reference/allergies"));
+const HealthcareNursing = lazy(() => import("@/pages/healthcare/inpatient/nursing"));
+const HealthcareDischarge = lazy(() => import("@/pages/healthcare/inpatient/discharge"));
+const HealthcareReferenceData = lazy(() => import("@/pages/healthcare/reference/reference-data"));
+const HealthcareObservations = lazy(() => import("@/pages/healthcare/diagnostics/observations"));
+const HealthcareObservationDetail = lazy(() => import("@/pages/healthcare/diagnostics/observation-detail"));
+const HealthcareLabTestCreate = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-create"));
+const HealthcareLabTestDetail = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-detail"));
+const HealthcareLabTestTemplateCreate = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-template-create"));
+const HealthcareLabTestTemplateDetail = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-template-detail"));
+const HealthcareLabTestTemplates = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-templates"));
+const HealthcareLabTestUOMs = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-uoms"));
+const HealthcareSampleCollection = lazy(() => import("@/pages/healthcare/diagnostics/sample-collection"));
+const HealthcareLabTestSamples = lazy(() => import("@/pages/healthcare/diagnostics/lab-test-samples"));
+const HealthcareObservationTemplates = lazy(() => import("@/pages/healthcare/diagnostics/observation-templates"));
+const HealthcareObservationTemplateDetail = lazy(() => import("@/pages/healthcare/diagnostics/observation-template-detail"));
+const HealthcareSampleCollectionDetail = lazy(() => import("@/pages/healthcare/diagnostics/sample-collection-detail"));
+const HealthcarePayments = lazy(() => import("@/pages/healthcare/billing/payments"));
+const HealthcarePharmacy = lazy(() => import("@/pages/healthcare/pharmacy/index"));
+const HealthcareOutpatientDispensing = lazy(() => import("@/pages/healthcare/pharmacy/outpatient-dispensing"));
+const HealthcareMedicationEntryList = lazy(() => import("@/pages/healthcare/pharmacy/medication-entry"));
+const HealthcareMedicationEntryDetail = lazy(() => import("@/pages/healthcare/pharmacy/medication-entry-detail"));
+const HealthcareMedicationRequests = lazy(() => import("@/pages/healthcare/pharmacy/medication-requests"));
+const HealthcareMedicationRequestCreate = lazy(() => import("@/pages/healthcare/pharmacy/medication-request-create"));
+const HealthcarePharmacyStock = lazy(() => import("@/pages/healthcare/pharmacy/pharmacy-stock"));
+const HealthcarePharmacyStockIntake = lazy(() => import("@/pages/healthcare/pharmacy/stock-intake"));
+const HealthcarePharmacyMedications = lazy(() => import("@/pages/healthcare/pharmacy/medications"));
+const HealthcareDiagnosticReports = lazy(() => import("@/pages/healthcare/diagnostics/diagnostic-reports"));
+const HealthcareDiagnosticReportDetail = lazy(() => import("@/pages/healthcare/diagnostics/diagnostic-report-detail"));
+const HealthcareServiceRequests = lazy(() => import("@/pages/healthcare/services/service-requests"));
+const HealthcareServiceRequestCreate = lazy(() => import("@/pages/healthcare/services/service-request-create"));
+const HealthcareServiceRequestDetail = lazy(() => import("@/pages/healthcare/services/service-request-detail"));
+
+// EEU Occupational Health & Safety
+const EEUOccupationalDashboard = lazy(() => import("@/pages/healthcare/occupational/index"));
+const EEUWorkplaceIncidents = lazy(() => import("@/pages/healthcare/occupational/incidents"));
+const EEUFitnessEvaluations = lazy(() => import("@/pages/healthcare/occupational/fitness-evaluations"));
+const EEUSickLeaveCertificates = lazy(() => import("@/pages/healthcare/occupational/sick-leave-certificates"));
+const EEUFirstAidKits = lazy(() => import("@/pages/healthcare/occupational/first-aid-kits"));
+const EEUStaffRegistry = lazy(() => import("@/pages/healthcare/occupational/staff-registry"));
+const EEUExecutiveReport = lazy(() => import("@/pages/healthcare/occupational/executive-report"));
+const EEUEmergencySOS = lazy(() => import("@/pages/healthcare/occupational/emergency-sos"));
+const EEUGuaranteeOfPayment = lazy(() => import("@/pages/healthcare/occupational/guarantee-of-payment"));
+const EEUPMECampaigns = lazy(() => import("@/pages/healthcare/occupational/pme-campaigns"));
+const EEUToxicSurveillance = lazy(() => import("@/pages/healthcare/occupational/toxic-surveillance"));
+const EEUOccupationalTraumaGuide = lazy(() => import("@/pages/healthcare/occupational/trauma-guide"));
+
+const Loading = () => (
+	<div className="flex h-40 items-center justify-center">
+		<div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+	</div>
+);
+
+const withSuspense = (Component: React.ComponentType) => (
+	<Suspense fallback={<Loading />}>
+		<Component />
+	</Suspense>
+);
+
+export const erpRoutes: RouteObject[] = [
+	{ path: "erp/dashboard", element: withSuspense(HealthcareDashboard) },
+	{ path: "erp/guide", element: withSuspense(ErpGuide) },
+	{ path: "healthcare/guide", element: withSuspense(ErpGuide) },
+	{ path: "erp/profile", element: withSuspense(UserProfile) },
+	{ path: "erp/account", element: withSuspense(UserAccount) },
+	{ path: "erp/roles", element: withSuspense(RolesPage) },
+	{ path: "erp/user-roles", element: withSuspense(UserRolesPage) },
+	{ path: "erp/permission-matrix", element: withSuspense(PermissionMatrixPage) },
+	{ path: "erp/doctypes", element: withSuspense(DocTypesPage) },
+	{ path: "erp/comments", element: withSuspense(CommentsPage) },
+	{ path: "erp/communications", element: withSuspense(CommunicationsPage) },
+	{ path: "erp/error-logs", element: withSuspense(ErrorLogsPage) },
+	{ path: "erp/scheduled-jobs", element: withSuspense(ScheduledJobsPage) },
+	{ path: "erp/permission-inspector", element: withSuspense(PermissionInspectorPage) },
+	{ path: "erp/user-permissions", element: withSuspense(UserPermissionsPage) },
+	{ path: "erp/doc-shares", element: withSuspense(DocSharesPage) },
+	{ path: "erp/server-scripts", element: withSuspense(ServerScriptsPage) },
+	{ path: "erp/data-import-export", element: withSuspense(DataImportExportPage) },
+	{ path: "erp/naming-rules", element: withSuspense(NamingRulesPage) },
+	{ path: "erp/bulk-messaging", element: withSuspense(BulkMessagingPage) },
+	{ path: "erp/workflows", element: withSuspense(WorkflowDesignerPage) },
+	{ path: "erp/email-templates", element: withSuspense(EmailTemplatesPage) },
+	{ path: "erp/system-settings", element: withSuspense(SystemSettingsPage) },
+	{ path: "erp/notification-settings", element: withSuspense(NotificationSettingsPage) },
+	{ path: "erp/notification-delivery-log", element: withSuspense(NotificationDeliveryLogPage) },
+	{ path: "erp/my-notification-prefs", element: withSuspense(UserNotificationPrefsPage) },
+	{ path: "erp/email-accounts", element: withSuspense(EmailAccountsPage) },
+	{ path: "erp/users", element: withSuspense(UserListPage) },
+	{ path: "erp/users/:id", element: withSuspense(UserManagementPage) },
+	{ path: "erp/roles/:id", element: withSuspense(RoleManagementPage) },
+	// Healthcare routes
+	{ path: "healthcare", element: withSuspense(HealthcareDashboard) },
+	{ path: "healthcare/patients", element: withSuspense(HealthcarePatients) },
+	{ path: "healthcare/patients/new", element: withSuspense(HealthcarePatientCreate) },
+	{ path: "healthcare/patient-history", element: withSuspense(HealthcarePatientHistory) },
+	{ path: "healthcare/patients/:id", element: withSuspense(HealthcarePatientDetail) },
+	{ path: "healthcare/practitioners", element: withSuspense(HealthcarePractitioners) },
+	{ path: "healthcare/practitioners/new", element: withSuspense(HealthcarePractitionerCreate) },
+	{ path: "healthcare/practitioners/:id", element: withSuspense(HealthcarePractitionerDetail) },
+	{ path: "healthcare/practitioners/practitioner-schedule", element: withSuspense(HealthcarePractitionerSchedule) },
+	{ path: "healthcare/appointments", element: withSuspense(HealthcareAppointments) },
+	{ path: "healthcare/appointments/:id", element: withSuspense(HealthcareAppointmentDetail) },
+	{ path: "healthcare/encounters", element: withSuspense(HealthcareEncounters) },
+	{ path: "healthcare/encounters/new", element: withSuspense(HealthcareEncounterCreate) },
+	{ path: "healthcare/encounters/:id", element: withSuspense(HealthcareEncounterDetail) },
+	{ path: "healthcare/external-referrals/new", element: withSuspense(HealthcareExternalReferralCreate) },
+	{ path: "healthcare/medical-leave-slips/new", element: withSuspense(HealthcareMedicalLeaveCreate) },
+	{ path: "healthcare/lab-dashboard", element: withSuspense(HealthcareLabDashboard) },
+	{ path: "healthcare/diagnostics", element: withSuspense(HealthcareLabDashboard) },
+	{ path: "healthcare/diagnostics/dashboard", element: withSuspense(HealthcareLabDashboard) },
+	{ path: "healthcare/lab-tests", element: withSuspense(HealthcareLabTests) },
+	{ path: "healthcare/lab-tests/new", element: withSuspense(HealthcareLabTestCreate) },
+	{ path: "healthcare/lab-tests/:id", element: withSuspense(HealthcareLabTestDetail) },
+	{ path: "healthcare/lab-test-templates", element: withSuspense(HealthcareLabTestTemplates) },
+	{ path: "healthcare/lab-test-templates/new", element: withSuspense(HealthcareLabTestTemplateCreate) },
+	{ path: "healthcare/lab-test-templates/:id", element: withSuspense(HealthcareLabTestTemplateDetail) },
+	{ path: "healthcare/lab-test-uoms", element: withSuspense(HealthcareLabTestUOMs) },
+	{ path: "healthcare/sample-collections", element: withSuspense(HealthcareSampleCollection) },
+	{ path: "healthcare/sample-collections/new", element: withSuspense(HealthcareSampleCollectionDetail) },
+	{ path: "healthcare/sample-collections/:id", element: withSuspense(HealthcareSampleCollectionDetail) },
+	{ path: "healthcare/lab-test-samples", element: withSuspense(HealthcareLabTestSamples) },
+	{ path: "healthcare/service-requests", element: withSuspense(HealthcareServiceRequests) },
+	{ path: "healthcare/service-requests/new", element: withSuspense(HealthcareServiceRequestCreate) },
+	{ path: "healthcare/service-requests/:id", element: withSuspense(HealthcareServiceRequestDetail) },
+	{ path: "healthcare/therapy", element: withSuspense(HealthcareTherapy) },
+	{ path: "healthcare/treatment-plan-templates", element: withSuspense(HealthcareTreatmentPlanTemplates) },
+	{ path: "healthcare/treatment-plan-templates/:id", element: withSuspense(HealthcareTreatmentPlanTemplateDetail) },
+	{ path: "healthcare/inpatient", element: withSuspense(HealthcareInpatient) },
+	{ path: "healthcare/insurance", element: withSuspense(HealthcareInsurance) },
+	{ path: "healthcare/departments", element: withSuspense(HealthcareDepartments) },
+	{ path: "healthcare/vital-signs", element: withSuspense(HealthcareVitalSigns) },
+	{ path: "healthcare/vital-signs/:id", element: withSuspense(HealthcareVitalSignsDetail) },
+	{ path: "healthcare/prescriptions", element: withSuspense(HealthcarePrescriptions) },
+	{ path: "healthcare/emergency", element: withSuspense(HealthcareEmergency) },
+	{ path: "healthcare/medications", element: withSuspense(HealthcareMedications) },
+	{ path: "healthcare/allergies", element: withSuspense(HealthcareAllergies) },
+	{ path: "healthcare/nursing", element: withSuspense(HealthcareNursing) },
+	{ path: "healthcare/discharge", element: withSuspense(HealthcareDischarge) },
+	{ path: "healthcare/reference-data", element: withSuspense(HealthcareReferenceData) },
+	{ path: "healthcare/observations", element: withSuspense(HealthcareObservations) },
+	{ path: "healthcare/observations/:id", element: withSuspense(HealthcareObservationDetail) },
+	{ path: "healthcare/observation-templates", element: withSuspense(HealthcareObservationTemplates) },
+	{ path: "healthcare/observation-templates/new", element: withSuspense(HealthcareObservationTemplateDetail) },
+	{ path: "healthcare/observation-templates/:id", element: withSuspense(HealthcareObservationTemplateDetail) },
+	{ path: "healthcare/payments", element: withSuspense(HealthcarePayments) },
+	{ path: "healthcare/pharmacy", element: withSuspense(HealthcarePharmacy) },
+	{ path: "healthcare/pharmacy/outpatient", element: withSuspense(HealthcareOutpatientDispensing) },
+	{ path: "healthcare/pharmacy/medication-entry", element: withSuspense(HealthcareMedicationEntryList) },
+	{ path: "healthcare/pharmacy/medication-entry/new", element: withSuspense(HealthcareMedicationEntryDetail) },
+	{ path: "healthcare/pharmacy/medication-entry/:id", element: withSuspense(HealthcareMedicationEntryDetail) },
+	{ path: "healthcare/pharmacy/medication-requests", element: withSuspense(HealthcareMedicationRequests) },
+	{ path: "healthcare/pharmacy/medication-requests/new", element: withSuspense(HealthcareMedicationRequestCreate) },
+	{ path: "healthcare/pharmacy/stock", element: withSuspense(HealthcarePharmacyStock) },
+	{ path: "healthcare/pharmacy/stock/intake", element: withSuspense(HealthcarePharmacyStockIntake) },
+	{ path: "healthcare/pharmacy/medications", element: withSuspense(HealthcarePharmacyMedications) },
+	{ path: "healthcare/diagnostics/reports", element: withSuspense(HealthcareDiagnosticReports) },
+	{ path: "healthcare/diagnostics/reports/:id", element: withSuspense(HealthcareDiagnosticReportDetail) },
+	// EEU Occupational Health & Safety
+	{ path: "healthcare/occupational", element: withSuspense(EEUOccupationalDashboard) },
+	{ path: "healthcare/occupational/dashboard", element: withSuspense(EEUOccupationalDashboard) },
+	{ path: "healthcare/occupational/incidents", element: withSuspense(EEUWorkplaceIncidents) },
+	{ path: "healthcare/occupational/fitness-evaluations", element: withSuspense(EEUFitnessEvaluations) },
+	{ path: "healthcare/occupational/sick-leave-certificates", element: withSuspense(EEUSickLeaveCertificates) },
+	{ path: "healthcare/occupational/first-aid-kits", element: withSuspense(EEUFirstAidKits) },
+	{ path: "healthcare/occupational/staff-registry", element: withSuspense(EEUStaffRegistry) },
+	{ path: "healthcare/occupational/executive-report", element: withSuspense(EEUExecutiveReport) },
+	{ path: "healthcare/occupational/emergency-sos", element: withSuspense(EEUEmergencySOS) },
+	{ path: "healthcare/occupational/guarantee-of-payment", element: withSuspense(EEUGuaranteeOfPayment) },
+	{ path: "healthcare/occupational/pme-campaigns", element: withSuspense(EEUPMECampaigns) },
+	{ path: "healthcare/occupational/toxic-surveillance", element: withSuspense(EEUToxicSurveillance) },
+	{ path: "healthcare/occupational/guide", element: withSuspense(EEUOccupationalTraumaGuide) },
+];
