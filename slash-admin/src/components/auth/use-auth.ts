@@ -34,7 +34,10 @@ export const useAuthCheck = (baseOn: "role" | "permission" = "permission") => {
 			return false;
 		}
 		if (isStaff) return true;
-		return resourcePool.some((p) => p.code === item);
+		return resourcePool.some((p: any) => {
+			if (typeof p === "string") return p === item;
+			return p?.code === item || p?.name === item;
+		});
 	};
 
 	// check if any item exists

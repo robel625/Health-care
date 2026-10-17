@@ -444,7 +444,7 @@ export default function EEUEmergencySOSPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-muted-foreground font-mono">
-                      <span>Destination Clinic: {sos.destination_clinic || "EEU Regional Clinic"}</span>
+                      <span>Destination Clinic: {sos.destination_clinic || "Ethiopian Electric Utility Medium Clinic"}</span>
                     </div>
                   </div>
 

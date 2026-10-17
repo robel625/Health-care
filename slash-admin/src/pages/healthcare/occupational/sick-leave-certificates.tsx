@@ -35,7 +35,7 @@ export default function EEUSickLeaveCertificatesPage() {
     doctor_remarks: "",
     fitness_state: "Fit for Light Duty Only",
     fit_to_work_date: new Date(Date.now() + 8 * 86400000).toISOString().split("T")[0],
-    eeu_clinic_branch: "Head Office Central Clinic",
+    eeu_clinic_branch: "Ethiopian Electric Utility Medium Clinic",
     eeu_leave_category: "Work-Related Electrical/Mechanical Injury",
     eeu_duty_restriction: "Restricted to Light Ground Duty (No Climbing / No Field Patrol)",
     status: "Issued",
@@ -185,14 +185,8 @@ export default function EEUSickLeaveCertificatesPage() {
               onChange={(e) => setBranchFilter(e.target.value)}
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <option value="all">All EEU Clinic Branches</option>
-              <option value="Head Office Central Clinic">Head Office Central Clinic</option>
-              <option value="Kality Central Depot Clinic">Kality Central Depot Clinic</option>
-              <option value="Legehar Substation Clinic">Legehar Substation Clinic</option>
-              <option value="Adama Regional Clinic">Adama Regional Clinic</option>
-              <option value="Hawassa Regional Clinic">Hawassa Regional Clinic</option>
-              <option value="Bahir Dar Regional Clinic">Bahir Dar Regional Clinic</option>
-              <option value="Dire Dawa Regional Clinic">Dire Dawa Regional Clinic</option>
+              <option value="all">All Records</option>
+              <option value="Ethiopian Electric Utility Medium Clinic">Ethiopian Electric Utility Medium Clinic</option>
             </select>
           </div>
         </CardContent>
@@ -242,7 +236,7 @@ export default function EEUSickLeaveCertificatesPage() {
                         <div className="text-xs text-muted-foreground">Issued: {cert.issue_date}</div>
                       </td>
                       <td className="py-3 px-2 text-xs text-foreground">
-                        {(cert as any).eeu_clinic_branch || "Head Office Central Clinic"}
+                        {(cert as any).eeu_clinic_branch || "Ethiopian Electric Utility Medium Clinic"}
                       </td>
                       <td className="py-3 px-2">
                         <Badge variant="outline" className="font-semibold text-amber-600 dark:text-amber-400">
@@ -345,15 +339,7 @@ export default function EEUSickLeaveCertificatesPage() {
                   onChange={(e) => setForm({ ...form, eeu_clinic_branch: e.target.value })}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="Head Office Central Clinic">Head Office Central Clinic</option>
-                  <option value="Kality Central Depot Clinic">Kality Central Depot Clinic</option>
-                  <option value="Legehar Substation Clinic">Legehar Substation Clinic</option>
-                  <option value="Adama Regional Clinic">Adama Regional Clinic</option>
-                  <option value="Hawassa Regional Clinic">Hawassa Regional Clinic</option>
-                  <option value="Bahir Dar Regional Clinic">Bahir Dar Regional Clinic</option>
-                  <option value="Dire Dawa Regional Clinic">Dire Dawa Regional Clinic</option>
-                  <option value="Mekelle Regional Clinic">Mekelle Regional Clinic</option>
-                  <option value="Jimma Regional Clinic">Jimma Regional Clinic</option>
+                  <option value="Ethiopian Electric Utility Medium Clinic">Ethiopian Electric Utility Medium Clinic</option>
                 </select>
               </div>
 
@@ -487,16 +473,24 @@ export default function EEUSickLeaveCertificatesPage() {
               {/* Header with EEU Logo */}
               <div className="flex items-center justify-between border-b-2 border-slate-900 pb-4">
                 <div className="flex items-center gap-4">
-                  <img src={eeuLogoImg} alt="EEU Emblem" className="h-16 w-16 object-contain" />
+                  <img
+                    src={eeuLogoImg}
+                    alt="EEU Emblem"
+                    className="h-8 w-8 sm:h-9 sm:w-9 print:h-6 print:w-6 print:max-h-6 object-contain shrink-0"
+                    style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact", maxHeight: "26px" }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = "/eeu-logo.png";
+                    }}
+                  />
                   <div>
                     <h2 className="text-lg font-black tracking-wide text-slate-950 uppercase">
                       Ethiopian Electric Utility (EEU)
                     </h2>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-                      Directorate of Occupational Health & Medical Services
+                      Ethiopian Electric Utility Medium Clinic
                     </h3>
                     <p className="text-[11px] text-slate-600">
-                      {(selectedCert as any).eeu_clinic_branch || "Head Office Central Medical Directorate"} • Addis Ababa, Ethiopia
+                      Addis Ababa, Ethiopia • Tel: +251 11 515 7103
                     </p>
                   </div>
                 </div>

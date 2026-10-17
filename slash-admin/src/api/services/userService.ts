@@ -13,6 +13,38 @@ export interface SignUpReq extends SignInReq {
 
 export type SignInRes = UserToken & { user: UserInfo };
 
+export interface ForgotPasswordReq {
+  identifier: string; // Email address OR Phone number
+}
+
+export interface ForgotPasswordRes {
+  success: boolean;
+  message: string;
+  channel: "email" | "phone";
+  target_masked: string;
+  token: string;
+  debug_code?: string;
+}
+
+export interface VerifyResetCodeReq {
+  code: string;
+  token?: string;
+  identifier?: string;
+}
+
+export interface ResetPasswordReq {
+  code: string;
+  new_password: string;
+  token?: string;
+  identifier?: string;
+}
+
+export interface ResetPasswordRes {
+  success: boolean;
+  message: string;
+  username?: string;
+}
+
 export enum UserApi {
   SignIn = "/auth/login/",
   SignUp = "/auth/register/",
@@ -20,6 +52,9 @@ export enum UserApi {
   Refresh = "/auth/refresh/",
   User = "/auth/users/",
   Profile = "/auth/profile/",
+  ForgotPassword = "/auth/forgot-password/",
+  VerifyResetCode = "/auth/verify-reset-code/",
+  ResetPassword = "/auth/reset-password/",
 }
 
 /**
@@ -34,7 +69,7 @@ const signin = (data: SignInReq) => apiClient.post<SignInRes>({ url: UserApi.Sig
 const signup = (data: SignUpReq) => apiClient.post<SignInRes>({ url: UserApi.SignUp, data });
 
 /**
- * Logout (optional - client-side token clear).
+ * Logout (client-side token clear).
  */
 const logout = () => apiClient.get({ url: UserApi.Logout });
 
@@ -57,6 +92,33 @@ const refreshToken = (refreshToken: string) =>
     data: { refreshToken },
   });
 
+/**
+ * Request password reset using Email address or Phone number.
+ */
+const forgotPassword = (data: ForgotPasswordReq) =>
+  apiClient.post<ForgotPasswordRes>({
+    url: UserApi.ForgotPassword,
+    data,
+  });
+
+/**
+ * Verify 6-digit password reset OTP.
+ */
+const verifyResetCode = (data: VerifyResetCodeReq) =>
+  apiClient.post<{ valid: boolean; message: string }>({
+    url: UserApi.VerifyResetCode,
+    data,
+  });
+
+/**
+ * Reset password with verification code.
+ */
+const resetPassword = (data: ResetPasswordReq) =>
+  apiClient.post<ResetPasswordRes>({
+    url: UserApi.ResetPassword,
+    data,
+  });
+
 export default {
   signin,
   signup,
@@ -64,4 +126,7 @@ export default {
   logout,
   getProfile,
   refreshToken,
+  forgotPassword,
+  verifyResetCode,
+  resetPassword,
 };

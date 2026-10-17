@@ -32,7 +32,7 @@ interface Filters {
   practitioner_type: string;
   mobile_phone: string;
   email: string;
-  fee_sort: "" | "asc" | "desc";
+  eeu_staff_id: string;
   created_from: string;
   created_to: string;
   modified_from: string;
@@ -47,7 +47,7 @@ const EMPTY_FILTERS: Filters = {
   practitioner_type: "",
   mobile_phone: "",
   email: "",
-  fee_sort: "",
+  eeu_staff_id: "",
   created_from: "",
   created_to: "",
   modified_from: "",
@@ -144,8 +144,7 @@ export default function PractitionersPage() {
     designation: "Consultant Physician",
     mobile_phone: "",
     email: "",
-    op_consulting_charge: 100,
-    inpatient_visit_charge: 150,
+    eeu_staff_id: "",
     enable_free_follow_ups: false,
     max_visits: 1,
     valid_days: 7,
@@ -177,7 +176,7 @@ export default function PractitionersPage() {
   };
 
   const activeFilterCount = Object.entries(filters).filter(
-    ([k, v]) => v && k !== "search" && k !== "fee_sort"
+    ([k, v]) => v && k !== "search"
   ).length;
 
   // Data loader
@@ -190,6 +189,7 @@ export default function PractitionersPage() {
       if (filters.department) params.department = filters.department;
       if (filters.gender) params.gender = filters.gender;
       if (filters.practitioner_type) params.practitioner_type = filters.practitioner_type;
+      if (filters.eeu_staff_id) params.eeu_staff_id = filters.eeu_staff_id;
       if (filters.mobile_phone) params.mobile_phone = filters.mobile_phone;
       if (filters.email) params.email = filters.email;
       if (filters.created_from) params.creation__gte = filters.created_from;
@@ -199,17 +199,6 @@ export default function PractitionersPage() {
 
       const res = await HealthcareApi.practitioners.list(params);
       let results = res.results || [];
-
-      // Client-side fee sorting if selected
-      if (filters.fee_sort === "asc") {
-        results = [...results].sort(
-          (a, b) => Number(a.op_consulting_charge || 0) - Number(b.op_consulting_charge || 0)
-        );
-      } else if (filters.fee_sort === "desc") {
-        results = [...results].sort(
-          (a, b) => Number(b.op_consulting_charge || 0) - Number(a.op_consulting_charge || 0)
-        );
-      }
 
       setData(results);
       setTotal(res.count || 0);
@@ -259,8 +248,7 @@ export default function PractitionersPage() {
       designation: "Consultant Physician",
       mobile_phone: "",
       email: "",
-      op_consulting_charge: 100,
-      inpatient_visit_charge: 150,
+      eeu_staff_id: "",
       enable_free_follow_ups: false,
       max_visits: 1,
       valid_days: 7,
@@ -284,8 +272,9 @@ export default function PractitionersPage() {
         designation: quickForm.designation.trim(),
         mobile_phone: quickForm.mobile_phone.trim(),
         email: quickForm.email.trim(),
-        op_consulting_charge: quickForm.op_consulting_charge,
-        inpatient_visit_charge: quickForm.inpatient_visit_charge,
+        eeu_staff_id: quickForm.eeu_staff_id.trim(),
+        op_consulting_charge: 0,
+        inpatient_visit_charge: 0,
         enable_free_follow_ups: quickForm.enable_free_follow_ups,
         max_visits: quickForm.max_visits,
         valid_days: quickForm.valid_days,
@@ -337,12 +326,8 @@ export default function PractitionersPage() {
   if (filters.gender) filterChips.push({ key: "gender", label: "Gender", value: filters.gender });
   if (filters.mobile_phone) filterChips.push({ key: "mobile_phone", label: "Phone", value: filters.mobile_phone });
   if (filters.email) filterChips.push({ key: "email", label: "Email", value: filters.email });
-  if (filters.fee_sort) {
-    filterChips.push({
-      key: "fee_sort",
-      label: "Fee Sort",
-      value: filters.fee_sort === "asc" ? "Low → High" : "High → Low",
-    });
+  if (filters.eeu_staff_id) {
+    filterChips.push({ key: "eeu_staff_id", label: "EEU ID", value: filters.eeu_staff_id });
   }
   if (filters.created_from || filters.created_to) {
     filterChips.push({
@@ -394,6 +379,12 @@ export default function PractitionersPage() {
                   {r.practitioner_id || `PRA-${r.id}`}
                   <Icon icon="solar:copy-bold" size={10} className="opacity-60" />
                 </span>
+                {r.eeu_staff_id && (
+                  <span className="font-mono text-[10px] text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded flex items-center gap-1 font-semibold">
+                    <Icon icon="solar:badge-check-bold" size={10} className="text-primary" />
+                    {r.eeu_staff_id}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -443,16 +434,21 @@ export default function PractitionersPage() {
       ),
     },
     {
-      title: "Consulting Charge",
-      dataIndex: "op_consulting_charge",
-      width: 150,
-      render: (v: number, r) => (
+      title: "EEU ID",
+      dataIndex: "eeu_staff_id",
+      width: 140,
+      render: (v: string, r) => (
         <div>
-          <span className="font-mono font-bold text-xs text-foreground">
-            ${Number(v || 0).toFixed(2)}
-          </span>
-          <span className="text-[10px] text-muted-foreground block">
-            Inpatient: ${Number(r.inpatient_visit_charge || 0).toFixed(2)}
+          {v || r.eeu_staff_id ? (
+            <span className="inline-flex items-center gap-1 font-mono font-bold text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+              <Icon icon="solar:badge-check-bold" size={12} className="text-primary shrink-0" />
+              {v || r.eeu_staff_id}
+            </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground/60 italic font-mono">EEU-PENDING</span>
+          )}
+          <span className="text-[10px] text-muted-foreground block mt-0.5">
+            EEU Salaried Staff
           </span>
         </div>
       ),
@@ -788,16 +784,6 @@ export default function PractitionersPage() {
               <option value="External">Visiting Specialist</option>
             </select>
 
-            {/* Fee Sort */}
-            <select
-              className="h-9 border border-input rounded-md px-3 text-xs bg-background text-foreground font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={filters.fee_sort}
-              onChange={(e) => updateFilter("fee_sort", e.target.value)}
-            >
-              <option value="">Sort: Default</option>
-              <option value="asc">Fee: Low to High</option>
-              <option value="desc">Fee: High to Low</option>
-            </select>
 
             {/* More Filters button */}
             <Button
@@ -900,66 +886,6 @@ export default function PractitionersPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Active Only
           </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              updateFilter(
-                "practitioner_type",
-                filters.practitioner_type === "Internal" ? "" : "Internal"
-              )
-            }
-            className={cn(
-              "px-3 py-1 rounded-full text-xs font-semibold border shrink-0 transition-colors flex items-center gap-1.5",
-              filters.practitioner_type === "Internal"
-                ? "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/40 font-bold"
-                : "bg-background text-muted-foreground border-border hover:bg-muted/50"
-            )}
-          >
-            <Icon icon="solar:buildings-bold" size={12} />
-            Internal Faculty
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              updateFilter(
-                "practitioner_type",
-                filters.practitioner_type === "External" ? "" : "External"
-              )
-            }
-            className={cn(
-              "px-3 py-1 rounded-full text-xs font-semibold border shrink-0 transition-colors flex items-center gap-1.5",
-              filters.practitioner_type === "External"
-                ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/40 font-bold"
-                : "bg-background text-muted-foreground border-border hover:bg-muted/50"
-            )}
-          >
-            <Icon icon="solar:user-hand-up-bold" size={12} />
-            Visiting Specialists
-          </button>
-
-          {/* Department Quick Pills (Top 5) */}
-          {departments.slice(0, 5).map((d) => {
-            const isSelected = String(filters.department) === String(d.id);
-            const style = getDepartmentStyle(d.department);
-            return (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => updateFilter("department", isSelected ? "" : String(d.id))}
-                className={cn(
-                  "px-3 py-1 rounded-full text-xs font-semibold border shrink-0 transition-colors flex items-center gap-1",
-                  isSelected
-                    ? cn("font-bold", style.badge)
-                    : "bg-background text-muted-foreground border-border hover:bg-muted/50"
-                )}
-              >
-                <Icon icon={style.icon} size={12} />
-                {d.department}
-              </button>
-            );
-          })}
         </div>
 
         {/* ─── Expandable Extended Filters Card ─── */}
@@ -967,6 +893,15 @@ export default function PractitionersPage() {
           <Card className="border-dashed bg-muted/10 shadow-2xs">
             <CardContent className="pt-4 pb-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground">EEU Staff ID</Label>
+                  <Input
+                    placeholder="Filter by EEU ID..."
+                    value={filters.eeu_staff_id}
+                    onChange={(e) => updateFilter("eeu_staff_id", e.target.value)}
+                    className="mt-1 h-8 text-xs font-mono font-bold"
+                  />
+                </div>
                 <div>
                   <Label className="text-xs font-semibold text-muted-foreground">Mobile Phone</Label>
                   <Input
@@ -1183,35 +1118,20 @@ export default function PractitionersPage() {
                         </div>
                       </div>
 
-                      {/* Clinical & Fee Metric Highlights */}
+                      {/* EEU Enterprise Staff Profile */}
                       <div className="p-3 rounded-xl bg-muted/30 border border-border/50 space-y-1.5 text-xs mb-3.5">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-[10px] text-muted-foreground block font-medium">
-                              Consultation Fee
-                            </span>
-                            <span className="font-mono font-bold text-xs text-foreground">
-                              ${Number(r.op_consulting_charge || 0).toFixed(2)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-muted-foreground block font-medium">
-                              Inpatient Round
-                            </span>
-                            <span className="font-mono font-bold text-xs text-foreground">
-                              ${Number(r.inpatient_visit_charge || 0).toFixed(2)}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground block font-medium">
+                            EEU Staff ID
+                          </span>
+                          <span className="font-mono font-bold text-xs text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                            {r.eeu_staff_id || "EEU-PENDING"}
+                          </span>
                         </div>
-
-                        {r.enable_free_follow_ups && (
-                          <div className="pt-1.5 border-t border-border/40 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                            <Icon icon="solar:check-circle-bold" size={11} />
-                            <span>
-                              Free Follow-up: {r.valid_days || 7} days ({r.max_visits || 1} visit)
-                            </span>
-                          </div>
-                        )}
+                        <div className="pt-1.5 border-t border-border/40 text-[10px] text-muted-foreground flex items-center justify-between">
+                          <span>Enterprise Affiliation:</span>
+                          <span className="font-semibold text-foreground">EEU Salaried Staff</span>
+                        </div>
                       </div>
 
                       {/* Contact Details */}
@@ -1473,42 +1393,28 @@ export default function PractitionersPage() {
 
             <Separator />
 
-            {/* Consulting Charges */}
+            {/* EEU Employee Identification */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                3. Consultation Fees
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Icon icon="solar:shield-check-bold" size={14} className="text-primary" />
+                3. EEU Employee Identification
               </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold">Outpatient Rate ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    className="mt-1 h-8 text-xs font-mono font-bold"
-                    value={quickForm.op_consulting_charge}
-                    onChange={(e) =>
-                      setQuickForm({
-                        ...quickForm,
-                        op_consulting_charge: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Inpatient Visit ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    className="mt-1 h-8 text-xs font-mono font-bold"
-                    value={quickForm.inpatient_visit_charge}
-                    onChange={(e) =>
-                      setQuickForm({
-                        ...quickForm,
-                        inpatient_visit_charge: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
+              <div>
+                <Label className="text-xs font-semibold">EEU Staff ID *</Label>
+                <Input
+                  placeholder="e.g. EEU-MD-0421"
+                  className="mt-1 h-8 text-xs font-mono font-bold"
+                  value={quickForm.eeu_staff_id || ""}
+                  onChange={(e) =>
+                    setQuickForm({
+                      ...quickForm,
+                      eeu_staff_id: e.target.value,
+                    })
+                  }
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Practitioners & Specialists are salaried EEU personnel. No consultation tariffs or billing charges apply.
+                </p>
               </div>
             </div>
 

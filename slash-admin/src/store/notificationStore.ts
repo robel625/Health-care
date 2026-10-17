@@ -10,6 +10,7 @@ export interface NotificationCounts {
   job_failures: number;
   comments: number;
   unread_notifications: number;
+  failed_deliveries: number;
 }
 
 type NotificationStore = {
@@ -34,6 +35,7 @@ export const useNotificationStore = create<NotificationStore>()(
         job_failures: 0,
         comments: 0,
         unread_notifications: 0,
+        failed_deliveries: 0,
       },
       lastFetched: null,
       actions: {

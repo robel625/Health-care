@@ -65,7 +65,7 @@ function calculateMarleyAge(dobString?: string, ageNum?: number | null): string 
     years -= 1;
     months += 12;
   }
-  return `${years} Year(s) ${months} Month(s) ${days} Day(s)`;
+  return `${years} Year(s)`;
 }
 
 function errMessage(e: any, fallback: string): string {

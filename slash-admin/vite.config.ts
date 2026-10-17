@@ -35,12 +35,12 @@ export default defineConfig(({ mode }) => {
 			port: 3001,
 			proxy: {
 				"/api": {
-					target: "http://localhost:8000",
+					target: env.VITE_BACKEND_URL || "http://localhost:8000",
 					changeOrigin: true,
 					secure: false,
 				},
 				"/media": {
-					target: "http://localhost:8000",
+					target: env.VITE_BACKEND_URL || "http://localhost:8000",
 					changeOrigin: true,
 					secure: false,
 				},

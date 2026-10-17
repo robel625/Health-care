@@ -177,14 +177,16 @@ class Patient(BaseModel):
         related_name="patients",
         help_text="Employer Enterprise: Ethiopian Electric Utility (EEU) or Ethiopian Electric Power (EEP)"
     )
+    COMPANY_AFFILIATION_CHOICES = [
+        ("Ethiopian Electric Utility (EEU)", "Ethiopian Electric Utility (EEU)"),
+        ("Ethiopian Electric Football club (EEFC)", "Ethiopian Electric Football club (EEFC)"),
+        ("Retired Employee", "Retired Employee"),
+        ("Others", "Others"),
+    ]
     company_affiliation = models.CharField(
         max_length=120, default="Ethiopian Electric Utility (EEU)", blank=True,
-        choices=[
-            ("Ethiopian Electric Utility (EEU)", "Ethiopian Electric Utility (EEU)"),
-            ("Ethiopian Electric Power (EEP)", "Ethiopian Electric Power (EEP)"),
-            ("Contractor / Other", "Contractor / Other"),
-        ],
-        help_text="Employer organization: EEU vs EEP vs Contractor/Other"
+        choices=COMPANY_AFFILIATION_CHOICES,
+        help_text="Employer scheme: EEU, EEFC, Retired Employee, or Others"
     )
     # EEU / EEP Staff & Occupational Details
     eeu_staff_id = models.CharField(max_length=60, blank=True, default="", help_text="Staff/Payroll ID e.g. EEU-657854, EEP-765767, others-578879")
@@ -244,7 +246,7 @@ class Patient(BaseModel):
     @property
     def age_display(self):
         """
-        Age as Marley's `get_age()` renders it: "35 Year(s) 2 Month(s) 11 Day(s)".
+        Age in years: "35 Year(s)".
 
         Derived from `dob` when present (so it never goes stale), otherwise
         falls back to the stored `age` integer.
@@ -264,14 +266,16 @@ class Patient(BaseModel):
         if months < 0:
             years -= 1
             months += 12
-        return f"{years} Year(s) {months} Month(s) {days} Day(s)"
+        return f"{years} Year(s)"
 
     @property
     def employer_code(self):
         affil = self.company_affiliation or ""
-        if "EEP" in affil:
-            return "EEP"
-        if "Contractor" in affil or "Other" in affil:
+        if "EEFC" in affil or "Football" in affil:
+            return "EEFC"
+        if "Retired" in affil:
+            return "RET"
+        if "Other" in affil or "Contractor" in affil:
             return "others"
         return "EEU"
 
@@ -281,25 +285,30 @@ class Patient(BaseModel):
         import re
         val = str(raw_id).strip()
         # Strip EMP or EMP-
-        val = re.sub(r'^(EEU|EEP|others)-EMP-?', r'\1-', val, flags=re.I)
+        val = re.sub(r'^(EEU|EEFC|RET|others)-EMP-?', r'\1-', val, flags=re.I)
         val = re.sub(r'^EMP-?', '', val, flags=re.I)
 
         # If already starts with proper prefix, format prefix case correctly
         if re.match(r'^eeu-?', val, re.I):
             num = re.sub(r'^eeu-?', '', val, flags=re.I).strip()
             return f"EEU-{num}" if num else ""
-        if re.match(r'^eep-?', val, re.I):
-            num = re.sub(r'^eep-?', '', val, flags=re.I).strip()
-            return f"EEP-{num}" if num else ""
+        if re.match(r'^eefc-?', val, re.I):
+            num = re.sub(r'^eefc-?', '', val, flags=re.I).strip()
+            return f"EEFC-{num}" if num else ""
+        if re.match(r'^(ret|retired)-?', val, re.I):
+            num = re.sub(r'^(ret|retired)-?', '', val, flags=re.I).strip()
+            return f"RET-{num}" if num else ""
         if re.match(r'^others?-?', val, re.I):
             num = re.sub(r'^others?-?', '', val, flags=re.I).strip()
             return f"others-{num}" if num else ""
 
         # Raw number without prefix - prepend according to company affiliation
         affil = self.company_affiliation or ""
-        if "EEP" in affil:
-            return f"EEP-{val}"
-        elif "Contractor" in affil or "Other" in affil:
+        if "EEFC" in affil or "Football" in affil:
+            return f"EEFC-{val}"
+        elif "Retired" in affil:
+            return f"RET-{val}"
+        elif "Other" in affil or "Contractor" in affil:
             return f"others-{val}"
         else:
             return f"EEU-{val}"
@@ -311,8 +320,10 @@ class Patient(BaseModel):
             last = Patient.objects.order_by("-id").first()
             num = (last.id + 1) if last else 1
             self.patient_id = f"HLC-PAT-{num:05d}"
-        if not self.company_affiliation or self.company_affiliation == "Joint EEU / EEP Entity":
+        if not self.company_affiliation or self.company_affiliation in ("Joint EEU / EEP Entity", "Ethiopian Electric Power (EEP)"):
             self.company_affiliation = "Ethiopian Electric Utility (EEU)"
+        elif self.company_affiliation in ("Contractor / Other", "Construction / Contractor / Other"):
+            self.company_affiliation = "Others"
         if self.eeu_staff_id:
             self.eeu_staff_id = self.format_staff_id(self.eeu_staff_id)
         if self.eeu_primary_staff_id:
@@ -320,14 +331,9 @@ class Patient(BaseModel):
         if not self.company_id:
             try:
                 from apps.setup.models import Company
-                if "EEP" in self.company_affiliation:
-                    comp = Company.objects.filter(abbr="EEP").first()
-                    if comp:
-                        self.company = comp
-                else:
-                    comp = Company.objects.filter(abbr="EEU").first()
-                    if comp:
-                        self.company = comp
+                comp = Company.objects.filter(abbr="EEU").first() or Company.objects.first()
+                if comp:
+                    self.company = comp
             except Exception:
                 pass
         super().save(*args, **kwargs)
@@ -361,6 +367,7 @@ class HealthcarePractitioner(BaseModel):
         MedicalDepartment, on_delete=models.SET_NULL, null=True, blank=True
     )
     designation = models.CharField(max_length=140, blank=True, default="")
+    eeu_staff_id = models.CharField(max_length=60, blank=True, default="", help_text="EEU Staff Employee ID")
     mobile_phone = models.CharField(max_length=20, blank=True, default="")
     residence_phone = models.CharField(max_length=20, blank=True, default="")
     office_phone = models.CharField(max_length=20, blank=True, default="")
@@ -754,6 +761,10 @@ class PatientEncounter(BaseModel):
     notes = models.TextField(blank=True, default="")
     # Marley's `encounter_comment` — the "Review Details" field.
     encounter_comment = models.TextField(blank=True, default="")
+    is_confidential = models.BooleanField(
+        default=False,
+        help_text="True if encounter involves confidential/sensitive care (psychiatric, reproductive health, etc.)",
+    )
 
     # Per-section "In print" flags shown against Symptoms / Diagnosis.
     symptoms_in_print = models.BooleanField(default=True)
@@ -786,6 +797,19 @@ class PatientEncounter(BaseModel):
         # Snapshot the patient's age the way Marley's patient_age field does.
         if not self.patient_age and self.patient_id:
             self.patient_age = self.patient.age_display
+
+        # Auto-detect sensitive/confidential keywords in clinical notes
+        if not self.is_confidential:
+            all_text = f"{self.symptoms} {self.physical_examination} {self.clinical_notes} {self.notes} {self.encounter_comment}".lower()
+            sensitive_kw = [
+                "hiv", "aids", "retrovir", "antiretroviral", "cd4 count", "viral load",
+                "syphilis", "gonorrh", "chlamydia", "hepatitis b", "hepatitis c",
+                "psychiatric", "depression", "bipolar", "schizophr", "suicid", "psychosis",
+                "abortion", "termination of pregnancy"
+            ]
+            if any(kw in all_text for kw in sensitive_kw):
+                self.is_confidential = True
+
         super().save(*args, **kwargs)
 
 
@@ -833,6 +857,20 @@ class Diagnosis(BaseModel):
                  ("Chronic", "Chronic")],
     )
     is_primary = models.BooleanField(default=False)
+    is_confidential = models.BooleanField(
+        default=False,
+        help_text="True if diagnosis contains confidential/sensitive condition (HIV/AIDS, Mental Health, Reproductive Health, etc.)",
+    )
+    confidentiality_category = models.CharField(
+        max_length=50, blank=True, default="Standard",
+        choices=[
+            ("Standard", "Standard (Non-Restricted)"),
+            ("HIV/AIDS", "HIV/AIDS / Infectious Disease"),
+            ("Mental Health", "Mental Health / Psychiatric"),
+            ("Reproductive Health", "Reproductive Health"),
+            ("Confidential", "Confidential / Highly Sensitive"),
+        ],
+    )
 
     class Meta:
         db_table = "healthcare_diagnosis"
@@ -845,7 +883,29 @@ class Diagnosis(BaseModel):
         # Keep the denormalised name in sync with the linked catalog entry.
         if self.diagnosis_master_id and not self.diagnosis:
             self.diagnosis = self.diagnosis_master.diagnosis
+
+        # Auto-detect sensitive categories if not marked confidential
+        if not self.is_confidential:
+            diag_lower = f"{self.diagnosis} {self.description}".lower()
+            sensitive_keywords = {
+                "HIV/AIDS": ["hiv", "aids", "retrovir", "antiretroviral", "cd4 count", "viral load", "syphilis", "gonorrh", "chlamydia", "hepatitis b", "hepatitis c"],
+                "Mental Health": ["psychiatric", "depression", "depressive", "bipolar", "schizophr", "suicid", "psychosis", "hallucination", "ptsd", "anxiety disorder", "substance abuse", "addiction"],
+                "Reproductive Health": ["abortion", "termination of pregnancy", "miscarriage", "contraception", "sterilization", "tubal ligation", "vasectomy", "infertility", "ectopic pregnancy", "std", "sti"],
+            }
+            for cat, keywords in sensitive_keywords.items():
+                if any(kw in diag_lower for kw in keywords):
+                    self.is_confidential = True
+                    self.confidentiality_category = cat
+                    break
+
         super().save(*args, **kwargs)
+
+        # Propagate confidentiality to parent encounter
+        if self.is_confidential and self.encounter_id:
+            try:
+                PatientEncounter.objects.filter(id=self.encounter_id, is_confidential=False).update(is_confidential=True)
+            except Exception:
+                pass
 
 
 class Symptom(BaseModel):
@@ -2525,6 +2585,10 @@ class ClinicalNote(BaseModel):
         HealthcarePractitioner, on_delete=models.SET_NULL, null=True, blank=True
     )
     note_content = models.TextField()
+    is_confidential = models.BooleanField(
+        default=False,
+        help_text="Restricted confidential note accessible only by authorized treating practitioner",
+    )
     note_date = models.DateField(auto_now_add=True)
     note_time = models.TimeField(null=True, blank=True)
 
@@ -4923,17 +4987,9 @@ class MedicalLeaveSlip(BaseModel):
     )
     # EEU Specific Certifications
     eeu_clinic_branch = models.CharField(
-        max_length=100, default="Head Office Central Clinic",
+        max_length=100, default="Ethiopian Electric Utility Medium Clinic",
         choices=[
-            ("Head Office Central Clinic", "Head Office Central Clinic"),
-            ("Kality Central Depot Clinic", "Kality Central Depot Clinic"),
-            ("Legehar Substation Clinic", "Legehar Substation Clinic"),
-            ("Adama Regional Clinic", "Adama Regional Clinic"),
-            ("Hawassa Regional Clinic", "Hawassa Regional Clinic"),
-            ("Bahir Dar Regional Clinic", "Bahir Dar Regional Clinic"),
-            ("Dire Dawa Regional Clinic", "Dire Dawa Regional Clinic"),
-            ("Mekelle Regional Clinic", "Mekelle Regional Clinic"),
-            ("Jimma Regional Clinic", "Jimma Regional Clinic"),
+            ("Ethiopian Electric Utility Medium Clinic", "Ethiopian Electric Utility Medium Clinic"),
         ]
     )
     eeu_leave_category = models.CharField(
@@ -5333,7 +5389,7 @@ class EEUEmergencySOS(BaseModel):
     )
     caller_name = models.CharField(max_length=140, help_text="Safety Officer / Shift Engineer")
     caller_phone = models.CharField(max_length=40, help_text="Emergency Contact Number")
-    destination_clinic = models.CharField(max_length=140, default="Head Office Central Clinic")
+    destination_clinic = models.CharField(max_length=140, default="Ethiopian Electric Utility Medium Clinic")
     eta_minutes = models.PositiveIntegerField(default=15, help_text="Estimated ambulance arrival time in minutes")
     pre_arrival_prep_notes = models.TextField(blank=True, default="", help_text="Triage actions: Defibrillator ready, Burn sheets, Saline line")
     status = models.CharField(

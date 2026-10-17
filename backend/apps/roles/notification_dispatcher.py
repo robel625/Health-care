@@ -23,6 +23,27 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def sanitize_notification_text(text: str, recipient: Optional[User] = None) -> str:
+    """
+    Ensure notification titles and preview messages never leak sensitive
+    medical conditions (HIV/AIDS, psychiatric diagnoses, reproductive health, etc.)
+    regardless of recipient.
+    """
+    if not text:
+        return text
+    import re
+    sensitive_patterns = [
+        r"\b(?:hiv|aids|retrovir\w*|antiretroviral|cd4\s+count|viral\s+load)\b",
+        r"\b(?:syphilis|gonorrh\w*|chlamydia|hepatitis\s+[bc])\b",
+        r"\b(?:psychiatric|bipolar|schizophr\w*|psychosis|suicid\w*)\b",
+        r"\b(?:abortion|termination\s+of\s+pregnancy|miscarriage)\b",
+    ]
+    sanitized = text
+    for pattern in sensitive_patterns:
+        sanitized = re.sub(pattern, "[Confidential Condition]", sanitized, flags=re.IGNORECASE)
+    return sanitized
+
+
 def dispatch_notification(
     event: str,
     subject: str = "",
@@ -31,33 +52,69 @@ def dispatch_notification(
     reference_name: str = "",
     triggered_by: Optional[User] = None,
     extra_recipients: Optional[list] = None,
+    direct_recipients: Optional[list] = None,
+    action_url: str = "",
+    category: str = "",
 ) -> list:
     """
     Dispatch a notification for the given event.
 
-    Looks up NotificationSetting for the event, determines recipients,
-    and creates NotificationDelivery records.
+    If direct_recipients is specified, notification is sent ONLY to those users
+    (e.g., patient assignment or lab result to the specific assigned practitioner).
+    Otherwise, looks up NotificationSetting for the event to determine recipients.
 
     Returns list of created NotificationDelivery instances.
     """
     from .core_models import NotificationSetting, NotificationDelivery, UserNotificationSetting
 
-    try:
-        setting = NotificationSetting.objects.get(event=event)
-    except NotificationSetting.DoesNotExist:
-        logger.debug(f"No NotificationSetting for event '{event}', skipping.")
-        return []
+    # Resolve category if not passed
+    if not category:
+        if event in ["error_log_created", "system_error", "scheduled_job_failure"]:
+            category = "errors"
+        elif event in ["communication_received"]:
+            category = "messages"
+        elif event in ["comment_added"]:
+            category = "comments"
+        else:
+            category = "clinical"
 
-    if not setting.enabled:
-        logger.debug(f"NotificationSetting for '{event}' is disabled, skipping.")
-        return []
+    # Resolve action_url if not passed
+    if not action_url and reference_doctype:
+        norm = reference_doctype.replace(" ", "").lower()
+        if norm in ["patientappointment", "appointment"]:
+            action_url = f"/healthcare/appointments/{reference_name}" if reference_name else "/healthcare/appointments"
+        elif norm in ["labtest", "labresult"]:
+            action_url = f"/healthcare/lab-tests/{reference_name}" if reference_name else "/healthcare/lab-tests"
+        elif norm in ["patientencounter", "encounter"]:
+            action_url = f"/healthcare/encounters/{reference_name}" if reference_name else "/healthcare/encounters"
+        elif norm in ["patient"]:
+            action_url = f"/healthcare/patients/{reference_name}" if reference_name else "/healthcare/patients"
+        elif norm in ["drugprescription", "prescription"]:
+            action_url = "/healthcare/prescriptions"
+        elif norm in ["errorlog"]:
+            action_url = "/erp/error-logs"
 
-    # Determine recipients from global setting
-    recipients = _get_recipients(setting, triggered_by)
-    if extra_recipients:
-        for extra in extra_recipients:
-            if extra and extra not in recipients and getattr(extra, "is_active", True):
-                recipients.append(extra)
+    setting = None
+    if direct_recipients is not None:
+        # Strictly send only to the specified direct_recipients!
+        recipients = [u for u in direct_recipients if u and getattr(u, "is_active", True)]
+    else:
+        try:
+            setting = NotificationSetting.objects.get(event=event)
+        except NotificationSetting.DoesNotExist:
+            logger.debug(f"No NotificationSetting for event '{event}', skipping.")
+            return []
+
+        if not setting.enabled:
+            logger.debug(f"NotificationSetting for '{event}' is disabled, skipping.")
+            return []
+
+        # Determine recipients from global setting
+        recipients = _get_recipients(setting, triggered_by)
+        if extra_recipients:
+            for extra in extra_recipients:
+                if extra and extra not in recipients and getattr(extra, "is_active", True):
+                    recipients.append(extra)
 
     if not recipients:
         logger.debug(f"No recipients found for event '{event}'.")
@@ -74,18 +131,36 @@ def dispatch_notification(
         if not effective["enabled"]:
             continue
 
+        final_subject = sanitize_notification_text(subject or _default_subject(event), recipient)
+        final_message = sanitize_notification_text(message or _default_message(event), recipient)
+
+        # Deduplication check: prevent creating duplicate notifications within a 5-minute window
+        recent_cutoff = timezone.now() - timezone.timedelta(minutes=5)
+        existing = NotificationDelivery.objects.filter(
+            recipient=recipient,
+            event=event,
+            reference_doctype=reference_doctype,
+            reference_name=str(reference_name),
+            creation__gte=recent_cutoff,
+        ).first()
+        if existing:
+            deliveries.append(existing)
+            continue
+
         # Dashboard notification
         if effective["send_dashboard"]:
             delivery = NotificationDelivery.objects.create(
                 event=event,
-                subject=subject or _default_subject(event),
-                message=message or _default_message(event),
+                subject=final_subject,
+                message=final_message,
                 channel="dashboard",
                 status="sent",
                 recipient=recipient,
                 recipient_name=recipient.username,
                 reference_doctype=reference_doctype,
-                reference_name=reference_name,
+                reference_name=str(reference_name),
+                category=category,
+                action_url=action_url,
                 triggered_by=triggered_by,
             )
             deliveries.append(delivery)
@@ -94,53 +169,57 @@ def dispatch_notification(
         if effective["send_system"]:
             delivery = NotificationDelivery.objects.create(
                 event=event,
-                subject=subject or _default_subject(event),
-                message=message or _default_message(event),
+                subject=final_subject,
+                message=final_message,
                 channel="system",
                 status="sent",
                 recipient=recipient,
                 recipient_name=recipient.username,
                 reference_doctype=reference_doctype,
-                reference_name=reference_name,
+                reference_name=str(reference_name),
+                category=category,
+                action_url=action_url,
                 triggered_by=triggered_by,
             )
             deliveries.append(delivery)
 
         # Email notification — actually send via Django email backend
         if effective["send_email"] and recipient.email:
-            email_subject = _render_template(setting.subject_template, subject, event)
-            email_message = _render_template(setting.message_template, message, event)
-            final_subject = email_subject or subject or _default_subject(event)
-            final_message = email_message or message or _default_message(event)
+            email_subject = _render_template(setting.subject_template if setting else "", final_subject, event)
+            email_message = _render_template(setting.message_template if setting else "", final_message, event)
+            mail_subject = email_subject or final_subject
+            mail_message = email_message or final_message
 
             # Build HTML email body
             html_body = _build_html_email(
-                subject=final_subject,
-                message=final_message,
+                subject=mail_subject,
+                message=mail_message,
                 event=event,
                 reference_doctype=reference_doctype,
-                reference_name=reference_name,
+                reference_name=str(reference_name),
                 triggered_by=triggered_by,
             )
 
             # Attempt to send
             email_success = _send_email(
                 to_email=recipient.email,
-                subject=final_subject,
-                message=final_message,
+                subject=mail_subject,
+                message=mail_message,
                 html_message=html_body,
             )
 
             delivery = NotificationDelivery.objects.create(
                 event=event,
-                subject=final_subject,
-                message=final_message,
+                subject=mail_subject,
+                message=mail_message,
                 channel="email",
                 status="sent" if email_success else "failed",
                 recipient=recipient,
                 recipient_name=recipient.username,
                 reference_doctype=reference_doctype,
-                reference_name=reference_name,
+                reference_name=str(reference_name),
+                category=category,
+                action_url=action_url,
                 triggered_by=triggered_by,
                 email_sent=email_success,
                 email_sent_at=timezone.now() if email_success else None,
@@ -162,9 +241,14 @@ ROLE_SYNONYMS = {
     "Pharmacy User": ["Pharmacist", "Pharmacy User"],
     "Lab Technician": ["Lab Technician", "Laboratory User", "LabTest Approver"],
     "Laboratory User": ["Lab Technician", "Laboratory User", "LabTest Approver"],
-    "Physician": ["Physician", "Doctor"],
+    "Physician": ["Physician", "Doctor", "Healthcare Practitioner", "Practitioner"],
+    "Doctor": ["Physician", "Doctor", "Healthcare Practitioner", "Practitioner"],
+    "Healthcare Practitioner": ["Physician", "Doctor", "Healthcare Practitioner", "Practitioner"],
+    "Practitioner": ["Physician", "Doctor", "Healthcare Practitioner", "Practitioner"],
     "Healthcare Administrator": ["Healthcare Administrator", "System Manager", "Administrator"],
     "System Manager": ["System Manager", "Healthcare Administrator", "Administrator"],
+    "Administrator": ["Healthcare Administrator", "System Manager", "Administrator"],
+    "Receptionist": ["Receptionist"],
 }
 
 
@@ -233,6 +317,8 @@ def _default_subject(event: str) -> str:
         "vital_signs_alert": "[CRITICAL VITAL SIGNS] Critical Vital Signs Alert",
         "patient_appointment_created": "[APPOINTMENT BOOKED] New Patient Appointment Scheduled",
         "patient_appointment_cancelled": "[APPOINTMENT CANCELLED] Patient Appointment Cancelled",
+        "patient_assigned": "[PATIENT ASSIGNED] New Patient Assigned to Your Schedule",
+        "patient_reassigned": "[PATIENT REASSIGNED] Patient Reassigned to Your Schedule",
         "inpatient_admission": "[INPATIENT ADMISSION] Inpatient Bed Admission",
         "inpatient_discharge": "[INPATIENT DISCHARGE] Inpatient Discharge",
         "lab_test_ordered": "[LAB TEST ORDERED] Diagnostic Lab Test Ordered",

@@ -1420,6 +1420,7 @@ export default function EncountersPage() {
           patientName={selectedEncounterForPrint.patient_name}
           patientAge={selectedEncounterForPrint.patient_age}
           patientSex={selectedEncounterForPrint.patient_sex}
+          patientId={selectedEncounterForPrint.patient}
           practitionerName={selectedEncounterForPrint.practitioner_name}
           departmentName={selectedEncounterForPrint.department_name}
           encounterDate={selectedEncounterForPrint.encounter_date}
@@ -1431,6 +1432,7 @@ export default function EncountersPage() {
             dosage: d.dosage || "",
             period: d.period || "",
             dosage_form: d.dosage_form || "Tablet",
+            comment: d.comment || "",
           }))}
         />
       )}

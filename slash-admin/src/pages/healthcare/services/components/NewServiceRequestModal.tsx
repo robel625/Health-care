@@ -15,7 +15,6 @@ import {
   type ServiceRequestCategory,
   type LabTestTemplate,
   type ClinicalProcedureTemplate,
-  type TherapyType,
   type ObservationTemplate,
 } from "@/api/services/healthcareService";
 import { getInitials } from "@/utils";
@@ -48,13 +47,7 @@ export const MARLEY_TEMPLATE_TYPES = [
     accent: "text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300",
     categoryHint: "Procedure",
   },
-  {
-    dt: "Therapy Type",
-    label: "Rehab & Therapy Plan",
-    icon: "solar:dumbbell-small-bold-duotone",
-    accent: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300",
-    categoryHint: "Therapy",
-  },
+
   {
     dt: "Observation Template",
     label: "Clinical Observation",
@@ -91,7 +84,6 @@ const COMMON_SERVICE_PRESETS = [
   { title: "CT Scan Head without Contrast", dt: "Clinical Procedure Template", category: "Radiology", department: "Radiology", sampleReq: false },
   { title: "MRI Lumbar Spine", dt: "Clinical Procedure Template", category: "Radiology", department: "Radiology", sampleReq: false },
   { title: "Wound Debridement & Suture", dt: "Clinical Procedure Template", category: "Procedure", department: "Surgery", sampleReq: false },
-  { title: "Physical Therapy Assessment & Exercise", dt: "Therapy Type", category: "Therapy", department: "Physiotherapy", sampleReq: false },
   { title: "General Surgery Consultation", dt: "Appointment Type", category: "Consultation", department: "Surgery", sampleReq: false },
 ];
 
@@ -114,7 +106,6 @@ export default function NewServiceRequestModal({
   // Dynamic template collections
   const [labTemplates, setLabTemplates] = useState<LabTestTemplate[]>([]);
   const [procedureTemplates, setProcedureTemplates] = useState<ClinicalProcedureTemplate[]>([]);
-  const [therapyTypes, setTherapyTypes] = useState<TherapyType[]>([]);
   const [observationTemplates, setObservationTemplates] = useState<ObservationTemplate[]>([]);
 
   // Form State (Exact Marley Service Request Schema)
@@ -172,10 +163,9 @@ export default function NewServiceRequestModal({
       HealthcareApi.serviceRequestCategories.list({ page_size: 100 }).catch(() => ({ results: [] })),
       HealthcareApi.labTestTemplates.list({ page_size: 150 }).catch(() => ({ results: [] })),
       HealthcareApi.procedureTemplates.list({ page_size: 150 }).catch(() => ({ results: [] })),
-      HealthcareApi.therapyTypes.list({ page_size: 100 }).catch(() => ({ results: [] })),
       HealthcareApi.observationTemplates.list({ page_size: 100 }).catch(() => ({ results: [] })),
     ])
-      .then(([pats, pracs, depts, cats, labs, procs, ths, obss]) => {
+      .then(([pats, pracs, depts, cats, labs, procs, obss]) => {
         const pList = (pats as any).results || [];
         setPatients(pList);
 
@@ -196,7 +186,6 @@ export default function NewServiceRequestModal({
 
         setLabTemplates((labs as any).results || []);
         setProcedureTemplates((procs as any).results || []);
-        setTherapyTypes((ths as any).results || []);
         setObservationTemplates((obss as any).results || []);
       })
       .finally(() => setLoading(false));
@@ -242,8 +231,6 @@ export default function NewServiceRequestModal({
     } else if (templateDt === "Clinical Procedure Template") {
       const proc = procedureTemplates.find((p) => p.template_name === dn);
       if (proc?.department) setDepartmentId(proc.department);
-      setSampleRequired(false);
-    } else if (templateDt === "Therapy Type") {
       setSampleRequired(false);
     } else if (templateDt === "Observation Template") {
       const obs = observationTemplates.find((o) => (o.observation || o.preferred_display_name) === dn);
@@ -397,12 +384,6 @@ export default function NewServiceRequestModal({
                           <span className="font-bold text-rose-600">{selectedPatient.blood_group}</span>
                         </>
                       )}
-                      {selectedPatient.inpatient_status === "Admitted" && (
-                        <>
-                          <span>•</span>
-                          <span className="text-indigo-600 font-semibold">Inpatient (Admitted)</span>
-                        </>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -519,19 +500,6 @@ export default function NewServiceRequestModal({
                   {procedureTemplates.map((p) => (
                     <option key={p.id} value={p.template_name}>
                       {p.template_name}
-                    </option>
-                  ))}
-                </select>
-              ) : templateDt === "Therapy Type" && therapyTypes.length > 0 ? (
-                <select
-                  className="mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  value={templateDn}
-                  onChange={(e) => handleSelectTemplateDn(e.target.value)}
-                >
-                  <option value="">Select Therapy Type...</option>
-                  {therapyTypes.map((t) => (
-                    <option key={t.id} value={t.therapy_type}>
-                      {t.therapy_type}
                     </option>
                   ))}
                 </select>

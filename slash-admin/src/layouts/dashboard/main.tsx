@@ -10,6 +10,8 @@ import { Suspense } from "react";
 import { Outlet, ScrollRestoration, useLocation } from "react-router";
 import { backendNavData } from "./nav/nav-data/nav-data-backend";
 import { frontendNavData } from "./nav/nav-data/nav-data-frontend";
+import { useUserInfo, useUserRoles } from "@/store/userStore";
+import { isRouteAuthorized } from "@/utils/rbac";
 
 /**
  * find auth by path
@@ -17,8 +19,24 @@ import { frontendNavData } from "./nav/nav-data/nav-data-frontend";
  * @returns
  */
 function findAuthByPath(path: string): string[] {
+	// 1. Exact match
 	const foundItem = allItems.find((item) => item.path === path);
-	return foundItem?.auth || [];
+	if (foundItem?.auth && foundItem.auth.length > 0) {
+		return foundItem.auth;
+	}
+
+	// 2. Hierarchical prefix match (e.g. /healthcare/encounters/123 -> /healthcare/encounters)
+	const segments = path.split("/").filter(Boolean);
+	while (segments.length > 0) {
+		segments.pop();
+		const parentPath = "/" + segments.join("/");
+		const parentItem = allItems.find((item) => item.path === parentPath);
+		if (parentItem?.auth && parentItem.auth.length > 0) {
+			return parentItem.auth;
+		}
+	}
+
+	return [];
 }
 
 const navData = GLOBAL_CONFIG.routerMode === "frontend" ? clone(frontendNavData) : backendNavData;
@@ -29,9 +47,17 @@ const allItems = navData.reduce((acc: any[], group) => {
 
 const Main = () => {
 	const { themeStretch } = useSettings();
+	const user = useUserInfo();
+	const roles = useUserRoles();
+	const isStaff = !!user?.is_staff;
 
 	const { pathname } = useLocation();
 	const currentNavAuth = findAuthByPath(pathname);
+	const routeAllowed = isRouteAuthorized(pathname, roles, isStaff);
+
+	if (!routeAllowed) {
+		return <Page403 />;
+	}
 
 	return (
 		<AuthGuard checkAny={currentNavAuth} fallback={<Page403 />}>

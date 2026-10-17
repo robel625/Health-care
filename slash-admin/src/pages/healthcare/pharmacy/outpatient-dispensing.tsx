@@ -50,9 +50,8 @@ export default function OutpatientDispensingPage() {
   const [otcSearch, setOtcSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
-  // Billing & Payment
-  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Insurance" | "Mobile Money" | "Bill Later">("Cash");
-  const [cashTendered, setCashTendered] = useState<string>("");
+  // EEU Staff Coverage
+  const paymentMethod = "Free Staff Benefit";
   const [dispenseNotes, setDispenseNotes] = useState("");
   const [dispensing, setDispensing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -291,8 +290,6 @@ export default function OutpatientDispensingPage() {
   // Calculations
   const subtotal = cart.reduce((acc, it) => acc + (it.quantity || 0) * (it.unit_price || 0), 0);
   const totalAmount = subtotal;
-  const cashNum = parseFloat(cashTendered) || 0;
-  const changeDue = Math.max(0, cashNum - totalAmount);
 
   // Dispense Submission
   const handleDispense = async () => {
@@ -331,7 +328,6 @@ export default function OutpatientDispensingPage() {
 
       // Reset cart and reload history & prescriptions
       setCart([]);
-      setCashTendered("");
       setDispenseNotes("");
       if (selectedPatientId) {
         HealthcareApi.pharmacy.getPatientPrescriptions(selectedPatientId).then((res) => {
@@ -450,8 +446,8 @@ export default function OutpatientDispensingPage() {
     <div className="space-y-6">
       <PharmacyNavHeader
         title="Outpatient Dispensing POS Terminal"
-        subtitle="Fast point-of-sale dispensing counter, doctor prescription fulfillment, real-time stock deductions, and customer billing."
-        badge="POS Terminal"
+        subtitle="Fast dispensing counter, EEU staff prescription fulfillment, and real-time inventory deductions."
+        badge="Staff Dispensary"
         action={
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-muted/80 p-0.5 rounded-xl border border-border/60">
@@ -936,23 +932,23 @@ export default function OutpatientDispensingPage() {
             </Card>
           </div>
 
-          {/* Right Column (1 Col): Billing & Dispense Confirmation */}
+          {/* Right Column (1 Col): EEU Staff Free Dispense Confirmation */}
           <div className="space-y-6">
             <Card className="border-border/70 shadow-xs sticky top-4">
               <CardHeader className="pb-3 border-b border-border/60 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600">
-                    <Icon icon="solar:card-bold-duotone" size={20} />
+                    <Icon icon="solar:shield-check-bold-duotone" size={20} />
                   </div>
-                  <CardTitle className="text-base font-bold">3. Checkout & Payment</CardTitle>
+                  <CardTitle className="text-base font-bold">3. EEU Staff Dispensing (100% Free)</CardTitle>
                 </div>
-                <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                  Ready
+                <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold border-emerald-500/30">
+                  100% Covered
                 </Badge>
               </CardHeader>
               <CardContent className="pt-4 space-y-4 text-xs">
-                {/* Financial Summary Card */}
-                <div className="space-y-2.5 bg-gradient-to-br from-muted/50 to-muted/20 p-4 rounded-xl border border-border/60 shadow-2xs">
+                {/* Free Benefit Summary Card */}
+                <div className="space-y-2.5 bg-gradient-to-br from-emerald-500/10 to-teal-500/5 p-4 rounded-xl border border-emerald-500/20 shadow-2xs">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Total Medications:</span>
                     <span className="font-semibold text-foreground">{cart.length} line items</span>
@@ -964,87 +960,25 @@ export default function OutpatientDispensingPage() {
                     </span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Tax / Handling:</span>
-                    <span className="font-semibold text-foreground">$0.00</span>
+                    <span>EEU Benefit Coverage:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">100% Subsidized</span>
                   </div>
-                  <div className="flex justify-between items-baseline text-base font-extrabold text-foreground border-t border-border/80 pt-3">
-                    <span>Grand Total:</span>
+                  <div className="flex justify-between items-baseline text-base font-extrabold text-foreground border-t border-emerald-500/30 pt-3">
+                    <span>Patient Due:</span>
                     <span className="text-2xl text-emerald-600 dark:text-emerald-400 font-mono">
-                      ${totalAmount.toFixed(2)}
+                      0.00 ETB
                     </span>
                   </div>
                 </div>
 
-                {/* Payment Method Selector */}
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Payment Method *</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-1.5">
-                    {(["Cash", "Card", "Insurance", "Mobile Money", "Bill Later"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setPaymentMethod(mode)}
-                        className={`p-2 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                          paymentMethod === mode
-                            ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 shadow-2xs"
-                            : "border-border/70 hover:bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        <Icon
-                          icon={
-                            mode === "Cash"
-                              ? "solar:dollar-bold"
-                              : mode === "Card"
-                              ? "solar:card-bold"
-                              : mode === "Insurance"
-                              ? "solar:shield-bold"
-                              : mode === "Mobile Money"
-                              ? "solar:smartphone-bold"
-                              : "solar:clock-circle-bold"
-                          }
-                          size={14}
-                        />
-                        {mode}
-                      </button>
-                    ))}
+                {/* EEU Staff Coverage Notice */}
+                <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-2.5">
+                  <Icon icon="solar:check-circle-bold" size={18} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] leading-relaxed text-muted-foreground">
+                    <p className="font-semibold text-foreground">EEU Staff Clinic Benefit</p>
+                    All medications and clinical care are completely free of charge for Ethiopian Electric Utility employees. No copay or billing invoice required.
                   </div>
                 </div>
-
-                {/* Cash tender & change calculator */}
-                {paymentMethod === "Cash" && (
-                  <div className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-medium">Cash Tendered ($)</Label>
-                      <Input
-                        type="number"
-                        placeholder="0.00"
-                        value={cashTendered}
-                        onChange={(e) => setCashTendered(e.target.value)}
-                        className="w-28 h-8 text-right font-bold text-xs rounded-lg"
-                      />
-                    </div>
-                    {/* Quick Tender Buttons */}
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <span className="text-[10px] text-muted-foreground mr-1">Quick:</span>
-                      {[totalAmount, Math.ceil(totalAmount / 10) * 10, Math.ceil(totalAmount / 50) * 50].filter(Boolean).map((val, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setCashTendered(val.toFixed(2))}
-                          className="px-2 py-0.5 rounded bg-muted hover:bg-muted-foreground/15 text-[10px] font-mono font-semibold"
-                        >
-                          ${val.toFixed(0)}
-                        </button>
-                      ))}
-                    </div>
-                    {cashNum > 0 && (
-                      <div className="flex justify-between items-baseline font-bold text-emerald-600 dark:text-emerald-400 pt-1 border-t border-border/60">
-                        <span className="text-xs">Change Due:</span>
-                        <span className="text-sm font-mono">${changeDue.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Dispenser Notes */}
                 <div>
@@ -1065,10 +999,10 @@ export default function OutpatientDispensingPage() {
                     disabled={dispensing || cart.length === 0}
                   >
                     <Icon icon="solar:check-circle-bold" size={20} />
-                    {dispensing ? "Processing Dispense..." : "Dispense & Deduct Stock"}
+                    {dispensing ? "Processing Dispense..." : "Dispense to Employee"}
                   </Button>
                   <p className="text-[11px] text-muted-foreground text-center mt-2">
-                    Deducts warehouse stock balances & prints dispensing label receipt.
+                    Deducts warehouse stock balances & records EEU staff dispensing voucher.
                   </p>
                 </div>
               </CardContent>

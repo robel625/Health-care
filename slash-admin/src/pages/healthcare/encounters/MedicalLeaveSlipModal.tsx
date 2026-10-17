@@ -6,6 +6,7 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { Icon } from "@/components/icon";
 import { HealthcareApi, type MedicalLeaveSlip } from "@/api/services/healthcareService";
+import eeuLogo from "@/assets/images/eeu-logo.png";
 
 interface MedicalLeaveSlipModalProps {
   open: boolean;
@@ -37,7 +38,7 @@ export default function MedicalLeaveSlipModal({
   practitionerName = "Attending Physician",
   practitionerDesignation = "Licensed Medical Practitioner",
   departmentName = "Outpatient Department",
-  companyName = "Healthcare Center & Hospital",
+  companyName = "Ethiopian Electric Utility Medium Clinic",
   defaultDiagnoses = [],
   onSlipSaved,
 }: MedicalLeaveSlipModalProps) {
@@ -68,10 +69,22 @@ export default function MedicalLeaveSlipModal({
   // Pre-populate diagnosis whenever opened
   useEffect(() => {
     if (open) {
-      if (!form.diagnosis && defaultDiagnoses.length > 0) {
+      let sessionCtx: any = null;
+      try {
+        const raw = sessionStorage.getItem("active_encounter_context");
+        if (raw) sessionCtx = JSON.parse(raw);
+      } catch (e) {
+        console.warn("Could not read active_encounter_context", e);
+      }
+
+      const diags = Array.from(new Set([...defaultDiagnoses, ...(sessionCtx?.diagnoses || [])]));
+      const comment = sessionCtx?.comment || "";
+
+      if (!form.diagnosis && diags.length > 0) {
         setForm((prev) => ({
           ...prev,
-          diagnosis: defaultDiagnoses.join("; "),
+          diagnosis: diags.join("; "),
+          doctor_remarks: comment ? `${comment}. Strict bed rest recommended.` : prev.doctor_remarks,
         }));
       }
     }
@@ -397,14 +410,27 @@ export default function MedicalLeaveSlipModal({
           <div className="border-2 border-slate-900 outline outline-1 outline-slate-400 outline-offset-2 rounded-sm p-4 bg-white">
             {/* Header */}
             <div className="text-center border-b-2 border-slate-900 pb-2 mb-3">
-              <h2 className="text-base font-extrabold uppercase tracking-tight text-slate-900">
-                {companyName}
-              </h2>
-              <p className="text-[10px] text-slate-600">
-                Medical Services & Occupational Health Department
-              </p>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <img
+                  src={eeuLogo}
+                  alt="EEU Emblem"
+                  className="w-8 h-8 object-contain shrink-0 print:w-6 print:h-6 print:max-h-6"
+                  style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact", maxHeight: "26px" }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "/eeu-logo.png";
+                  }}
+                />
+                <div className="text-left">
+                  <div className="text-[11px] font-bold text-[#D84315] leading-tight">
+                    የኢትዮጵያ ኤሌክትሪክ አገልግሎት
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-tight text-slate-900 leading-tight">
+                    Ethiopian Electric Utility Medium Clinic
+                  </h2>
+                </div>
+              </div>
               <p className="text-[9px] text-slate-500">
-                General Hospital Way • Tel: +251-11-000-0000 • Addis Ababa
+                Addis Ababa, Ethiopia • Tel: +251 11 515 7103
               </p>
 
               <div className="mt-2">

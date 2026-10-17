@@ -6,6 +6,7 @@ import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
 import { Icon } from "@/components/icon";
 import { HealthcareApi, type ExternalReferral } from "@/api/services/healthcareService";
+import eeuLogo from "@/assets/images/eeu-logo.png";
 
 interface ExternalReferralModalProps {
   open: boolean;
@@ -39,7 +40,7 @@ export default function ExternalReferralModal({
   practitionerId,
   practitionerName = "Attending Physician",
   departmentName = "General Outpatient",
-  companyName = "Healthcare Center & Hospital",
+  companyName = "Ethiopian Electric Utility Medium Clinic",
   defaultDiagnoses = [],
   defaultSymptoms = [],
   defaultMedications = [],
@@ -66,28 +67,80 @@ export default function ExternalReferralModal({
   // Pre-populate with current encounter's clinical context whenever modal opens
   useEffect(() => {
     if (open) {
+      let sessionCtx: any = null;
+      try {
+        const raw = sessionStorage.getItem("active_encounter_context");
+        if (raw) sessionCtx = JSON.parse(raw);
+      } catch (e) {
+        console.warn("Could not parse active_encounter_context", e);
+      }
+
+      const diags = Array.from(new Set([...defaultDiagnoses, ...(sessionCtx?.diagnoses || [])]));
+      const syms = Array.from(new Set([...defaultSymptoms, ...(sessionCtx?.symptoms || [])]));
+      const meds = Array.from(new Set([...defaultMedications, ...(sessionCtx?.medications || [])]));
+      const labs = Array.from(new Set([...defaultLabResults, ...(sessionCtx?.labs || [])]));
+      const procs = sessionCtx?.procedures || [];
+      const comment = sessionCtx?.comment || "";
+
+      // 1. Clinical Indication & Reason for Referral
+      let indicationText = "";
+      if (syms.length > 0 && diags.length > 0) {
+        indicationText = `Patient presents with acute presentation of ${syms.join(", ")}. Primary clinical evaluation indicates ${diags.join("; ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Requires advanced specialist evaluation, diagnostic workup, and continuing tertiary care.`;
+      } else if (syms.length > 0) {
+        indicationText = `Patient presents with: ${syms.join(", ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Requires specialized diagnostic evaluation and specialist consultation.`;
+      } else if (diags.length > 0) {
+        indicationText = `Patient evaluated for: ${diags.join("; ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Referred for tertiary consultation and continuing clinical management.`;
+      } else {
+        indicationText = `Patient evaluated at EEU Medium Clinic and referred for advanced diagnostic investigation and specialist management.${comment ? ` Attending clinician note: ${comment}` : ""}`;
+      }
+
+      // 2. Provisional Diagnosis
+      let provisionalDiagnosisText = "";
+      if (diags.length > 0) {
+        provisionalDiagnosisText = diags.join("; ");
+      } else if (syms.length > 0) {
+        provisionalDiagnosisText = `Acute symptomatic presentation: ${syms.join(", ")} (Definitive diagnosis pending diagnostic confirmation)`;
+      } else {
+        provisionalDiagnosisText = "Clinical assessment pending diagnostic confirmation.";
+      }
+
+      // 3. Treatment Summary
+      let treatmentSummaryText = "";
+      const treatmentBlocks: string[] = [];
+      if (meds.length > 0) {
+        treatmentBlocks.push(`Currently Prescribed Medications:\n${meds.map((m) => `• ${m}`).join("\n")}`);
+      }
+      if (procs.length > 0) {
+        treatmentBlocks.push(`Procedures Performed:\n${procs.map((p: string) => `• ${p}`).join("\n")}`);
+      }
+      if (treatmentBlocks.length > 0) {
+        treatmentSummaryText = treatmentBlocks.join("\n\n");
+      } else {
+        treatmentSummaryText = "Symptomatic outpatient supportive care initiated. No complex or parenteral medications administered prior to transfer.";
+      }
+
+      // 4. Relevant Test Results
+      let testResultsText = "";
+      if (labs.length > 0) {
+        testResultsText = `Recent Diagnostic & Laboratory Investigations:\n${labs.map((t) => `• ${t}`).join("\n")}\n\nBedside vitals and physical examination recorded on file.`;
+      } else {
+        testResultsText = "Bedside vital signs and physical assessment recorded on file. Full diagnostic laboratory profile and imaging recommended upon admission.";
+      }
+
+      // 5. Special Notes & Transport Instructions
+      let transportNotes = "Patient ambulatory and clinically stable for standard transport.";
+      if (comment) {
+        transportNotes += `\nAttending Clinician Remark: ${comment}`;
+      }
+      transportNotes += "\nDocumentation: Patient transferred with official referral dossier and medical encounter summary.\nContact referring Ethiopian Electric Utility Medium Clinic if condition changes during transit (+251 11 515 7103).";
+
       setForm((prev) => ({
         ...prev,
-        clinical_indication:
-          prev.clinical_indication ||
-          (defaultSymptoms.length > 0
-            ? `Patient presents with: ${defaultSymptoms.join(", ")}. Requires advanced diagnostic evaluation and specialized care.`
-            : "Requires specialized medical evaluation and ongoing management."),
-        provisional_diagnosis:
-          prev.provisional_diagnosis ||
-          (defaultDiagnoses.length > 0
-            ? defaultDiagnoses.join("; ")
-            : "Clinical diagnosis pending comprehensive review."),
-        treatment_summary:
-          prev.treatment_summary ||
-          (defaultMedications.length > 0
-            ? `Currently prescribed medications:\n${defaultMedications.map((m) => `• ${m}`).join("\n")}`
-            : "No active treatments initiated prior to referral."),
-        relevant_test_results:
-          prev.relevant_test_results ||
-          (defaultLabResults.length > 0
-            ? `Recent Diagnostic/Lab Investigations:\n${defaultLabResults.map((t) => `• ${t}`).join("\n")}`
-            : "Routine bedside parameters recorded. Further diagnostic tests recommended upon admission."),
+        clinical_indication: prev.clinical_indication || indicationText,
+        provisional_diagnosis: prev.provisional_diagnosis || provisionalDiagnosisText,
+        treatment_summary: prev.treatment_summary || treatmentSummaryText,
+        relevant_test_results: prev.relevant_test_results || testResultsText,
+        referral_notes: prev.referral_notes || transportNotes,
       }));
     }
   }, [open, defaultDiagnoses, defaultSymptoms, defaultMedications, defaultLabResults]);
@@ -422,16 +475,34 @@ export default function ExternalReferralModal({
         >
           {/* Header */}
           <div className="border-b-2 border-blue-900 pb-3 mb-4 flex justify-between items-start">
-            <div>
-              <h1 className="text-xl font-extrabold uppercase tracking-tight text-blue-950">
-                {companyName}
-              </h1>
-              <p className="text-xs text-slate-600 font-medium">
-                Clinical Services & Continuity of Care • Referral Management Unit
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Medical District Way • Tel: +251-11-000-0000 • Email: referrals@clinic.org
-              </p>
+            <div className="flex items-start gap-3">
+              <img
+                src={eeuLogo}
+                alt="EEU Emblem"
+                className="w-8 h-8 object-contain shrink-0 print:w-6 print:h-6 print:max-h-6"
+                style={{
+                  printColorAdjust: "exact",
+                  WebkitPrintColorAdjust: "exact",
+                  maxHeight: "26px",
+                }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/eeu-logo.png";
+                }}
+              />
+              <div>
+                <div className="text-[12px] font-bold text-[#D84315] leading-tight">
+                  የኢትዮጵያ ኤሌክትሪክ አገልግሎት
+                </div>
+                <h1 className="text-base font-extrabold uppercase tracking-tight text-blue-950">
+                  Ethiopian Electric Utility Medium Clinic
+                </h1>
+                <p className="text-xs text-slate-600 font-medium">
+                  Clinical Services & Outpatient Care • Referral Management Unit
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  Addis Ababa, Ethiopia • Tel: +251 11 515 7103
+                </p>
+              </div>
             </div>
 
             <div className="text-right space-y-1">

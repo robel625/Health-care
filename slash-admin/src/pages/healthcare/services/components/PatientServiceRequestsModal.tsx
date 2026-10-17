@@ -136,14 +136,12 @@ export default function PatientServiceRequestsModal({
   };
 
   // Launch downstream document workflow (Marley Parity)
-  const handleLaunchDownstream = (sr: ServiceRequest, actionType: "lab" | "procedure" | "therapy" | "sample" | "appointment") => {
+  const handleLaunchDownstream = (sr: ServiceRequest, actionType: "lab" | "procedure" | "sample" | "appointment") => {
     onOpenChange(false);
     if (actionType === "lab") {
       navigate(`/healthcare/lab-tests/new?patient=${patientId}&service_request=${sr.id}&template=${encodeURIComponent(sr.reference_name || sr.title || "")}`);
     } else if (actionType === "procedure") {
       navigate(`/healthcare/clinical-procedures/new?patient=${patientId}&service_request=${sr.id}&procedure=${encodeURIComponent(sr.reference_name || sr.title || "")}`);
-    } else if (actionType === "therapy") {
-      navigate(`/healthcare/therapy-sessions/new?patient=${patientId}&service_request=${sr.id}`);
     } else if (actionType === "sample") {
       navigate(`/healthcare/sample-collections/new?patient=${patientId}&service_request=${sr.id}`);
     } else if (actionType === "appointment") {
@@ -249,7 +247,6 @@ export default function PatientServiceRequestsModal({
                 <option value="Laboratory">Laboratory</option>
                 <option value="Radiology">Radiology & Scans</option>
                 <option value="Procedure">Procedures</option>
-                <option value="Therapy">Rehabilitation / Therapy</option>
                 <option value="Consultation">Consultations</option>
               </select>
 
@@ -279,7 +276,6 @@ export default function PatientServiceRequestsModal({
 
                 const isLab = (sr.reference_doctype === "Lab Test Template" || sr.template_dt === "Lab Test Template" || (sr.category_name || "").toLowerCase().includes("lab"));
                 const isProcedure = (sr.reference_doctype === "Clinical Procedure Template" || sr.template_dt === "Clinical Procedure Template" || (sr.category_name || "").toLowerCase().includes("procedure"));
-                const isTherapy = (sr.reference_doctype === "Therapy Type" || sr.template_dt === "Therapy Type" || (sr.category_name || "").toLowerCase().includes("therapy"));
                 const hasSampleReq = sr.notes?.includes("[Sample Required]") || isLab;
 
                 const isStat = sr.priority === "STAT";
@@ -420,17 +416,7 @@ export default function PatientServiceRequestsModal({
                           </Button>
                         )}
 
-                        {isTherapy && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleLaunchDownstream(sr, "therapy")}
-                            className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 font-semibold"
-                          >
-                            <Icon icon="solar:dumbbell-small-bold" size={12} className="mr-1" />
-                            Therapy Session
-                          </Button>
-                        )}
+
 
                         {hasSampleReq && (
                           <Button

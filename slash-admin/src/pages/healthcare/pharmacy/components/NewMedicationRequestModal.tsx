@@ -18,6 +18,10 @@ import {
 } from "@/api/services/healthcareService";
 import { WarehouseApi, type Warehouse } from "@/api/services/erpService";
 import PrescriptionPrintModal, { type PrintableDrugItem } from "@/pages/healthcare/encounters/PrescriptionPrintModal";
+import {
+  ETHIOPIAN_MEDICINE_OPTIONS,
+  getEthiopianMedicineDefaults,
+} from "../ethiopianMedicinesData";
 import { getInitials } from "@/utils";
 
 export interface NewMedicationRequestModalProps {
@@ -390,11 +394,12 @@ export default function NewMedicationRequestModal({
         (m.medication_name || m.name || m.generic_name || "").toLowerCase() ===
         medName.toLowerCase()
     );
+    const ethMed = !found ? getEthiopianMedicineDefaults(medName) : undefined;
 
-    const initialDosage = found?.default_prescription_dosage || "1-0-1";
-    const initialPeriod = found?.default_prescription_duration || "7 Days";
+    const initialDosage = found?.default_prescription_dosage || ethMed?.default_dosage || "1-0-1";
+    const initialPeriod = found?.default_prescription_duration || ethMed?.default_period || "7 Days";
     const dosageFormVal =
-      (found?.dosage_form ? String(found.dosage_form) : null) || "Tablet";
+      (found?.dosage_form ? String(found.dosage_form) : null) || ethMed?.primary_dosage_form || "Tablet";
 
     const qty = calculatePrescriptionQuantity(initialDosage, initialPeriod);
     const allergyWarn = checkAllergyContraindication(medName);
@@ -406,6 +411,7 @@ export default function NewMedicationRequestModal({
       period: initialPeriod,
       dosage_form: dosageFormVal,
       quantity: qty,
+      instructions: ethMed?.dosage_form_and_strength || "",
       allergy_warning: allergyWarn,
     });
 
@@ -446,6 +452,12 @@ export default function NewMedicationRequestModal({
       )
       .slice(0, 50);
   }, [patients, patientSearch]);
+
+  // Combined medication list including Ethiopian Essential Medicines List (EEML)
+  const allMedicationOptions = useMemo(() => {
+    const apiNames = medications.map((m) => m.medication_name || m.name || m.generic_name).filter(Boolean);
+    return Array.from(new Set([...apiNames, ...ETHIOPIAN_MEDICINE_OPTIONS]));
+  }, [medications]);
 
   // Validation
   const validateForm = (): boolean => {
@@ -863,14 +875,8 @@ export default function NewMedicationRequestModal({
                             required
                           />
                           <datalist id={`med-options-${item.id}`}>
-                            {medications.map((m) => (
-                              <option
-                                key={m.id}
-                                value={m.medication_name || m.name || m.generic_name}
-                              >
-                                {m.generic_name ? `(${m.generic_name})` : ""}{" "}
-                                {m.strength ? `[${m.strength}]` : ""}
-                              </option>
+                            {allMedicationOptions.map((optName, idx) => (
+                              <option key={idx} value={optName} />
                             ))}
                           </datalist>
                         </div>
@@ -1105,7 +1111,20 @@ export default function NewMedicationRequestModal({
           patientAge={selectedPatient.age}
           patientSex={selectedPatient.gender || selectedPatient.sex}
           patientId={selectedPatient.patient_id || selectedPatient.id}
+          cardNo={selectedPatient.eeu_staff_id || selectedPatient.patient_id || selectedPatient.uid || String(selectedPatient.id)}
+          patientWeight={(selectedPatient as any).weight || ""}
+          region={selectedPatient.eeu_region || selectedPatient.state || "Addis Ababa"}
+          town={selectedPatient.city || "Addis Ababa"}
+          woreda={selectedPatient.territory || ""}
+          kebele={selectedPatient.pincode || ""}
+          houseNo={selectedPatient.address || ""}
+          telNo={selectedPatient.mobile || selectedPatient.phone || ""}
+          isInpatient={Boolean(selectedPatient.inpatient_record)}
+          isOutpatient={!Boolean(selectedPatient.inpatient_record)}
+          isEmergency={Boolean(selectedPatient.emergency_record)}
           practitionerName={selectedPractitioner?.practitioner_name || "Attending Physician"}
+          practitionerQualification={selectedPractitioner?.designation || "Medical Officer / Physician"}
+          practitionerRegistration={selectedPractitioner?.practitioner_id || ""}
           departmentName={selectedPractitioner?.department_name}
           encounterDate={new Date().toISOString().split("T")[0]}
           drugRows={printableDrugItems}

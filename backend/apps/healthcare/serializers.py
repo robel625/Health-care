@@ -117,6 +117,74 @@ class PatientSerializer(serializers.ModelSerializer):
             DocumentTag.objects.filter(doctype="Patient", docname=str(obj.id)).values_list("tag", flat=True)
         )
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return ret
+
+        user = request.user
+        from apps.healthcare.permissions import (
+            is_receptionist, is_lab_tech, is_pharmacist, is_doctor,
+            is_healthcare_admin, has_active_care_relationship
+        )
+
+        sensitive_fields = [
+            "medical_history", "surgical_history", "risk_factors",
+            "patient_details", "surrounding_factors",
+            "tobacco_past_use", "tobacco_current_use",
+            "alcohol_past_use", "alcohol_current_use",
+        ]
+
+        is_rec = is_receptionist(user)
+        is_admin_only = is_healthcare_admin(user) and not is_doctor(user)
+        is_lab = is_lab_tech(user) and not is_doctor(user)
+        is_pharm = is_pharmacist(user) and not is_doctor(user)
+        is_doc = is_doctor(user)
+        has_care = has_active_care_relationship(user, instance) if is_doc else False
+
+        ret["access_scope"] = {
+            "can_view_clinical": is_doc or user.is_superuser,
+            "has_care_relationship": has_care or user.is_superuser,
+            "can_view_confidential": has_care or user.is_superuser,
+            "is_receptionist": is_rec,
+            "is_pharmacist": is_pharm,
+            "is_lab_tech": is_lab,
+            "is_admin": is_admin_only,
+        }
+
+        # 1. Receptionists NEVER see any medical history or allergies
+        if is_rec and not user.is_superuser:
+            for f in sensitive_fields + ["allergies", "medication"]:
+                ret[f] = ""
+            return ret
+
+        # 2. Lab Techs do not see general medical/surgical history
+        if is_lab and not user.is_superuser:
+            for f in sensitive_fields:
+                ret[f] = ""
+            return ret
+
+        # 3. Pharmacists need allergies & medication for dispensing safety, but NOT surgical/personal history
+        if is_pharm and not user.is_superuser:
+            for f in ["surgical_history", "patient_details", "surrounding_factors", "risk_factors"]:
+                ret[f] = ""
+            return ret
+
+        # 4. Admins do not receive clinical medical history (admin view only)
+        if is_admin_only and not user.is_superuser:
+            for f in sensitive_fields:
+                ret[f] = ""
+            return ret
+
+        # 5. Doctors without care relationship: mask sensitive history until assigned
+        if is_doc and not has_care and not user.is_superuser:
+            for f in sensitive_fields:
+                if ret.get(f):
+                    ret[f] = "[Restricted - Requires Patient Assignment or Encounter]"
+
+        return ret
+
 
 class PatientSummarySerializer(serializers.ModelSerializer):
     """Lightweight patient for dropdowns."""
@@ -155,7 +223,7 @@ class PractitionerSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = HealthcarePractitioner
         fields = ["id", "practitioner_id", "practitioner_name", "designation",
-                  "department", "status", "practitioner_type", "image"]
+                  "department", "status", "practitioner_type", "image", "eeu_staff_id"]
 
 
 class PractitionerScheduleSerializer(serializers.ModelSerializer):
@@ -446,6 +514,57 @@ class DiagnosisSerializer(serializers.ModelSerializer):
     class Meta:
         model = Diagnosis
         fields = "__all__"
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return ret
+
+        user = request.user
+        if user.is_superuser:
+            return ret
+
+        from apps.healthcare.permissions import (
+            can_view_confidential_records, is_receptionist,
+            is_lab_tech, is_pharmacist, is_healthcare_admin, is_doctor
+        )
+
+        # 1. Receptionists NEVER see clinical diagnoses
+        if is_receptionist(user):
+            ret["diagnosis"] = "[Restricted - Clinical Record]"
+            ret["description"] = ""
+            ret["diagnosis_code"] = ""
+            ret["diagnosis_master_name"] = ""
+            return ret
+
+        # 2. Lab techs & Pharmacists do NOT see confidential diagnoses
+        patient = instance.encounter.patient if instance.encounter else None
+        if (is_lab_tech(user) or is_pharmacist(user)) and not is_doctor(user):
+            if instance.is_confidential:
+                ret["diagnosis"] = "[Confidential Diagnosis - Restricted Access]"
+                ret["description"] = "Restricted to authorized treating clinician."
+                ret["diagnosis_code"] = "CONFIDENTIAL"
+                ret["diagnosis_master_name"] = ""
+            return ret
+
+        # 3. Healthcare Administrator (non-clinical) does not see confidential diagnoses
+        if is_healthcare_admin(user) and not is_doctor(user):
+            if instance.is_confidential:
+                ret["diagnosis"] = "[Confidential Diagnosis - Restricted Access]"
+                ret["description"] = "Restricted to authorized treating clinician."
+                ret["diagnosis_code"] = "CONFIDENTIAL"
+                ret["diagnosis_master_name"] = ""
+            return ret
+
+        # 4. Doctors without active care relationship cannot view confidential diagnoses
+        if instance.is_confidential and not can_view_confidential_records(user, patient):
+            ret["diagnosis"] = "[Confidential Diagnosis - Restricted Access]"
+            ret["description"] = "Restricted to authorized treating clinician."
+            ret["diagnosis_code"] = "CONFIDENTIAL"
+            ret["diagnosis_master_name"] = ""
+
+        return ret
 
 
 class SymptomSerializer(serializers.ModelSerializer):
@@ -1046,6 +1165,36 @@ class ClinicalNoteSerializer(serializers.ModelSerializer):
         model = ClinicalNote
         fields = "__all__"
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return ret
+
+        user = request.user
+        if user.is_superuser:
+            return ret
+
+        from apps.healthcare.permissions import (
+            can_view_confidential_records, is_receptionist,
+            is_lab_tech, is_pharmacist, is_healthcare_admin, is_doctor
+        )
+
+        if is_receptionist(user) or is_lab_tech(user) or is_pharmacist(user):
+            ret["note_content"] = "[Restricted - Clinical Record]"
+            return ret
+
+        if is_healthcare_admin(user) and not is_doctor(user):
+            ret["note_content"] = "[Administrative View - Content Hidden]"
+            return ret
+
+        if instance.is_confidential:
+            patient = instance.encounter.patient if instance.encounter else None
+            if not can_view_confidential_records(user, patient):
+                ret["note_content"] = "[Confidential Clinical Note - Restricted to Treating Clinician]"
+
+        return ret
+
 
 # ── Settings & Fee ─────────────────────────────────────────────────────────
 
@@ -1638,6 +1787,42 @@ class PatientEncounterSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientEncounter
         fields = "__all__"
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return ret
+
+        user = request.user
+        if user.is_superuser:
+            return ret
+
+        from apps.healthcare.permissions import (
+            can_view_confidential_records, is_receptionist,
+            is_lab_tech, is_pharmacist, is_healthcare_admin, is_doctor
+        )
+
+        clinical_text_fields = ["symptoms", "physical_examination", "clinical_notes", "notes", "encounter_comment"]
+
+        # Receptionists, Lab Techs, Pharmacists do not see encounter clinical notes
+        if is_receptionist(user) or is_lab_tech(user) or is_pharmacist(user):
+            for f in clinical_text_fields:
+                ret[f] = "[Restricted - Clinical Record]"
+            return ret
+
+        # Healthcare Administrator (non-clinical) does not see raw clinical notes
+        if is_healthcare_admin(user) and not is_doctor(user):
+            for f in clinical_text_fields:
+                ret[f] = "[Administrative View - Clinical Notes Hidden]"
+            return ret
+
+        # If encounter is marked confidential, enforce care relationship
+        if instance.is_confidential and not can_view_confidential_records(user, instance.patient):
+            for f in clinical_text_fields:
+                ret[f] = "[Confidential Encounter - Restricted to Treating Clinician]"
+
+        return ret
 
 
 class MedicationClassInteractionSerializer(serializers.ModelSerializer):

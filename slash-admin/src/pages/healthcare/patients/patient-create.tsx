@@ -12,14 +12,16 @@ import { useDoctypePermissions } from "@/utils/permissions";
 import { formatAge } from "@/utils/age";
 import { cn, extractErrorMessage } from "@/utils";
 import { toast } from "sonner";
+import BulkEmployeeImportModal from "./components/BulkEmployeeImportModal";
 
-type RegistrationTab = "demographics" | "medical" | "eeu" | "account";
+type RegistrationTab = "demographics" | "medical" | "lifestyle";
 
 export default function PatientCreatePage() {
   const { canCreate } = useDoctypePermissions("Patient");
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<RegistrationTab>("demographics");
   const [saving, setSaving] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   const [form, setForm] = useState({
     // Patient Demographics
@@ -79,16 +81,17 @@ export default function PatientCreatePage() {
   const update = (key: string, value: any) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const getCompanyPrefix = (affiliation?: string) => {
-    if (affiliation?.includes("EEP")) return "EEP-";
-    if (affiliation?.includes("Contractor") || affiliation?.includes("Other")) return "others-";
+    if (affiliation?.includes("EEFC") || affiliation?.includes("Football")) return "EEFC-";
+    if (affiliation?.includes("Retired")) return "RET-";
+    if (affiliation?.includes("Other")) return "others-";
     return "EEU-";
   };
 
   const extractStaffNumber = (fullId?: string) => {
     if (!fullId) return "";
     return fullId
-      .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-      .replace(/^(EEU|EEP|others)-/i, "")
+      .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+      .replace(/^(EEU|EEFC|RET|others)-/i, "")
       .replace(/^EMP-?/i, "");
   };
 
@@ -100,10 +103,12 @@ export default function PatientCreatePage() {
     const newPrimId = primNum ? `${newPrefix}${primNum}` : "";
 
     let newDept = form.eeu_department;
-    if (newAffiliation.includes("EEP")) {
-      newDept = "Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)";
-    } else if (newAffiliation.includes("Contractor") || newAffiliation.includes("Other")) {
-      newDept = "External Construction & Infrastructure Subcontractor";
+    if (newAffiliation.includes("EEFC") || newAffiliation.includes("Football")) {
+      newDept = "Ethiopian Electric Football Club (EEFC)";
+    } else if (newAffiliation.includes("Retired")) {
+      newDept = "Pension & Retired Staff Directorate";
+    } else if (newAffiliation.includes("Other")) {
+      newDept = "Other Partner / External Entity";
     } else {
       newDept = "Distribution Directorate";
     }
@@ -159,6 +164,7 @@ export default function PatientCreatePage() {
         middle_name: form.middle_name.trim(),
         last_name: form.last_name.trim(),
         dob: form.dob ? form.dob : null,
+        occupation: form.occupation || form.eeu_cadre || "",
       };
       const patient = await HealthcareApi.patients.create(payload);
       toast.success(`Patient ${patient.patient_name || patient.first_name} successfully registered!`);
@@ -177,8 +183,7 @@ export default function PatientCreatePage() {
   const tabs: { key: RegistrationTab; label: string; icon: string; step: string }[] = [
     { key: "demographics", label: "Demographics & Contact", icon: "solar:user-id-bold-duotone", step: "01" },
     { key: "medical", label: "Medical Baseline & Allergies", icon: "solar:medical-kit-bold-duotone", step: "02" },
-    { key: "eeu", label: "EEU / EEP Affiliation", icon: "solar:buildings-bold-duotone", step: "03" },
-    { key: "account", label: "Risk & Account Setup", icon: "solar:shield-warning-bold-duotone", step: "04" },
+    { key: "lifestyle", label: "Lifestyle & Clinical Notes", icon: "solar:shield-bold-duotone", step: "03" },
   ];
 
   return (
@@ -265,27 +270,33 @@ export default function PatientCreatePage() {
                 <span
                   className={cn(
                     "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                    form.company_affiliation?.includes("EEP")
-                      ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                      : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
+                    form.company_affiliation?.includes("EEFC")
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                      : form.company_affiliation?.includes("Retired")
+                      ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                      : form.company_affiliation?.includes("Other")
                       ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
                       : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                   )}
                 >
                   <Icon
                     icon={
-                      form.company_affiliation?.includes("EEP")
-                        ? "solar:bolt-bold"
-                        : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                        ? "solar:shield-warning-bold"
+                      form.company_affiliation?.includes("EEFC")
+                        ? "solar:football-bold"
+                        : form.company_affiliation?.includes("Retired")
+                        ? "solar:user-heart-bold"
+                        : form.company_affiliation?.includes("Other")
+                        ? "solar:users-group-two-rounded-bold"
                         : "solar:buildings-bold"
                     }
                     size={10}
                   />
-                  {form.company_affiliation?.includes("EEP")
-                    ? "EEP Affiliated"
-                    : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                    ? "Contractor / Other"
+                  {form.company_affiliation?.includes("EEFC")
+                    ? "EEFC Football Club"
+                    : form.company_affiliation?.includes("Retired")
+                    ? "Retired Employee"
+                    : form.company_affiliation?.includes("Other")
+                    ? "Others"
                     : "EEU Affiliated"}
                 </span>
               </div>
@@ -294,6 +305,16 @@ export default function PatientCreatePage() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 self-end sm:self-center">
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() => setShowBulkImport(true)}
+              className="h-9 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Icon icon="solar:file-smile-bold" size={14} />
+              + Bulk Import Excel
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -324,7 +345,7 @@ export default function PatientCreatePage() {
       </div>
 
       {/* ─── Segmented Step Navigation Tabs ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 rounded-2xl border bg-muted/30">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 rounded-2xl border bg-muted/30">
         {tabs.map((tab) => {
           const active = activeTab === tab.key;
           return (
@@ -361,7 +382,7 @@ export default function PatientCreatePage() {
       {/* ─── TAB 1: Demographics & Contact ─── */}
       {activeTab === "demographics" && (
         <div className="space-y-6">
-          {/* Card 1: Legal Identity & Demographics */}
+          {/* Card 1: Patient Demographics & Scheme Affiliation */}
           <Card className="shadow-2xs overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -369,17 +390,18 @@ export default function PatientCreatePage() {
                   <Icon icon="solar:user-id-bold-duotone" size={20} />
                 </div>
                 <div>
-                  <CardTitle className="text-xs font-bold">Legal Demographics & Identification</CardTitle>
+                  <CardTitle className="text-xs font-bold">Patient Demographics & Scheme Affiliation</CardTitle>
                   <CardDescription className="text-xs">
-                    Primary bio-data, civil registry, biological gender, and blood grouping
+                    Legal identification, biological data, and corporate health scheme allocation
                   </CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="text-[10px] font-bold uppercase">
-                Required Section
+              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider text-primary border-primary/30">
+                Primary Identity
               </Badge>
             </CardHeader>
-            <CardContent className="p-5 space-y-4">
+            <CardContent className="p-5 space-y-5">
+              {/* Name Row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">
@@ -412,10 +434,11 @@ export default function PatientCreatePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              {/* Bio-data Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">
-                    Biological Gender <span className="text-destructive">*</span>
+                    Gender <span className="text-destructive">*</span>
                   </Label>
                   <select
                     className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
@@ -460,37 +483,175 @@ export default function PatientCreatePage() {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">Marital Status</Label>
+                  <select
+                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                    value={form.marital_status}
+                    onChange={(e) => update("marital_status", e.target.value)}
+                  >
+                    <option value="">Select Status</option>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* Employer Scheme Selection Buttons */}
+              <div className="pt-2">
+                <Label className="text-xs font-semibold text-foreground mb-1.5 block">
+                  Employer Scheme Sponsorship
+                </Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { label: "Ethiopian Electric Utility (EEU)", prefix: "EEU-", icon: "solar:transmission-bold-duotone", activeClass: "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+                    { label: "Ethiopian Electric Football club (EEFC)", prefix: "EEFC-", icon: "solar:football-bold-duotone", activeClass: "border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300" },
+                    { label: "Retired Employee", prefix: "RET-", icon: "solar:user-heart-bold-duotone", activeClass: "border-purple-500 bg-purple-500/10 text-purple-700 dark:text-purple-300" },
+                    { label: "Others", prefix: "others-", icon: "solar:users-group-two-rounded-bold-duotone", activeClass: "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+                  ].map((scheme) => {
+                    const isSelected =
+                      (scheme.prefix === "EEFC-" && (form.company_affiliation?.includes("EEFC") || form.company_affiliation?.includes("Football"))) ||
+                      (scheme.prefix === "RET-" && form.company_affiliation?.includes("Retired")) ||
+                      (scheme.prefix === "others-" && form.company_affiliation?.includes("Other")) ||
+                      (scheme.prefix === "EEU-" && !form.company_affiliation?.includes("EEFC") && !form.company_affiliation?.includes("Retired") && !form.company_affiliation?.includes("Other"));
+                    return (
+                      <button
+                        key={scheme.prefix}
+                        type="button"
+                        onClick={() => handleCompanyChange(scheme.label)}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 cursor-pointer",
+                          isSelected
+                            ? `${scheme.activeClass} font-semibold shadow-xs ring-1 ring-primary/20`
+                            : "border-border/60 hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Icon icon={scheme.icon} size={18} className="shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-xs truncate">{scheme.label}</div>
+                          <div className="text-[10px] opacity-70 font-mono font-bold">{scheme.prefix}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Staff ID & Employment Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">
-                    National ID / UID / Passport Number
+                    Staff / Member ID
                   </Label>
+                  <div className="flex items-center mt-1.5">
+                    <span className="inline-flex items-center px-2.5 h-9 rounded-l-lg border border-r-0 text-xs font-mono font-bold tracking-wider bg-muted/60 text-foreground select-none shrink-0">
+                      {getCompanyPrefix(form.company_affiliation)}
+                    </span>
+                    <Input
+                      className="h-9 text-xs font-mono rounded-l-none"
+                      value={extractStaffNumber(form.eeu_staff_id)}
+                      onChange={(e) => {
+                        const clean = extractStaffNumber(e.target.value).replace(/[^0-9A-Za-z-]/g, "").trim();
+                        update("eeu_staff_id", clean ? `${getCompanyPrefix(form.company_affiliation)}${clean}` : "");
+                      }}
+                      placeholder="e.g. 657854"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">Directorate / Department</Label>
                   <Input
                     className="mt-1.5 h-9 text-xs"
-                    value={form.uid}
-                    onChange={(e) => update("uid", e.target.value)}
-                    placeholder="Civil Identification Number"
+                    value={form.eeu_department}
+                    onChange={(e) => update("eeu_department", e.target.value)}
+                    placeholder="e.g., Distribution Directorate"
                   />
                 </div>
 
                 <div>
-                  <Label className="text-xs font-semibold text-foreground">Patient Registry Status</Label>
+                  <Label className="text-xs font-semibold text-foreground">Job Role / Cadre</Label>
+                  <Input
+                    className="mt-1.5 h-9 text-xs"
+                    value={form.eeu_cadre}
+                    onChange={(e) => update("eeu_cadre", e.target.value)}
+                    placeholder="e.g., Senior Lineman, Substation Electrician"
+                  />
+                </div>
+              </div>
+
+              {/* Beneficiary Tier & Sponsor Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">Beneficiary Category</Label>
                   <select
                     className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.status}
-                    onChange={(e) => update("status", e.target.value)}
+                    value={form.eeu_beneficiary_type}
+                    onChange={(e) => update("eeu_beneficiary_type", e.target.value)}
                   >
-                    <option value="Active">Active (Eligible for services)</option>
-                    <option value="Disabled">Disabled (Suspended registry)</option>
+                    <option value="Staff">Primary Staff / Member</option>
+                    <option value="Spouse">Dependent Spouse</option>
+                    <option value="Child">Dependent Child</option>
+                    <option value="Dependent Parent">Dependent Parent</option>
+                  </select>
+                </div>
+
+                {form.eeu_beneficiary_type !== "Staff" ? (
+                  <div>
+                    <Label className="text-xs font-semibold text-foreground">Sponsor Staff ID</Label>
+                    <div className="flex items-center mt-1.5">
+                      <span className="inline-flex items-center px-2.5 h-9 rounded-l-lg border border-r-0 text-xs font-mono font-bold tracking-wider bg-muted/60 text-foreground select-none shrink-0">
+                        {getCompanyPrefix(form.company_affiliation)}
+                      </span>
+                      <Input
+                        className="h-9 text-xs font-mono rounded-l-none"
+                        value={extractStaffNumber(form.eeu_primary_staff_id)}
+                        onChange={(e) => {
+                          const clean = extractStaffNumber(e.target.value).replace(/[^0-9A-Za-z-]/g, "").trim();
+                          update("eeu_primary_staff_id", clean ? `${getCompanyPrefix(form.company_affiliation)}${clean}` : "");
+                        }}
+                        placeholder="e.g. 657854"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs font-semibold text-foreground">Medical Scheme Coverage</Label>
+                    <select
+                      className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                      value={form.eeu_medical_coverage_status}
+                      onChange={(e) => update("eeu_medical_coverage_status", e.target.value)}
+                    >
+                      <option value="Active Coverage">Active Coverage</option>
+                      <option value="Special Approval">Special Approval</option>
+                      <option value="Exceeded Ceiling">Exceeded Ceiling</option>
+                      <option value="Suspended">Suspended</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">Occupational Climbing / Safety Fitness</Label>
+                  <select
+                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                    value={form.eeu_climbing_fitness_status}
+                    onChange={(e) => update("eeu_climbing_fitness_status", e.target.value)}
+                  >
+                    <option value="Fit to Climb">Fit to Climb / High-Elevation Certified</option>
+                    <option value="Restricted Ground Duty">Restricted Ground Duty</option>
+                    <option value="Temporarily Unfit">Temporarily Unfit</option>
+                    <option value="Not Applicable">Not Applicable (Office / Dependent)</option>
                   </select>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Card 2: Contact & Omnichannel Communication */}
+          {/* Card 2: Contact Information & Residence Address */}
           <Card className="shadow-2xs overflow-hidden">
             <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -498,14 +659,15 @@ export default function PatientCreatePage() {
                   <Icon icon="solar:phone-calling-bold-duotone" size={20} />
                 </div>
                 <div>
-                  <CardTitle className="text-xs font-bold">Contact & Omnichannel Communications</CardTitle>
+                  <CardTitle className="text-xs font-bold">Contact & Residential Address</CardTitle>
                   <CardDescription className="text-xs">
-                    Telephony, electronic notifications, and report delivery preferences
+                    Telephony, electronic notifications, and physical residence location
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-5 space-y-4">
+              {/* Telephony & Digital */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">Mobile Phone</Label>
@@ -517,9 +679,8 @@ export default function PatientCreatePage() {
                     placeholder="+251 91 123 4567"
                   />
                 </div>
-
                 <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Alternate / Landline Phone</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Alternate / Landline</Label>
                   <Input
                     type="tel"
                     className="mt-1.5 h-9 text-xs"
@@ -528,7 +689,6 @@ export default function PatientCreatePage() {
                     placeholder="+251 11 ..."
                   />
                 </div>
-
                 <div>
                   <Label className="text-xs font-semibold text-foreground">Email Address</Label>
                   <Input
@@ -541,74 +701,30 @@ export default function PatientCreatePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* Residence & Region */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                 <div>
-                  <Label className="text-xs font-semibold text-foreground">Lab & Clinical Report Preference</Label>
+                  <Label className="text-xs font-semibold text-foreground">Operational Region / State</Label>
                   <select
                     className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.report_preference}
-                    onChange={(e) => update("report_preference", e.target.value)}
+                    value={form.eeu_region}
+                    onChange={(e) => {
+                      update("eeu_region", e.target.value);
+                      update("state", e.target.value);
+                    }}
                   >
-                    <option value="Email">Electronic Mail (PDF report)</option>
-                    <option value="Patient Portal">Patient Portal Online View</option>
-                    <option value="Print">Physical Counter Print</option>
+                    <option value="Addis Ababa">Addis Ababa (Head Office / Central Hub)</option>
+                    <option value="Oromia">Oromia Regional Directorate</option>
+                    <option value="Amhara">Amhara Regional Directorate</option>
+                    <option value="Sidama">Sidama Regional Directorate</option>
+                    <option value="Somali">Somali Regional Directorate</option>
+                    <option value="Tigray">Tigray Regional Directorate</option>
+                    <option value="Dire Dawa">Dire Dawa Center</option>
+                    <option value="South West Ethiopia">South West Ethiopia Directorate</option>
+                    <option value="Central Ethiopia">Central Ethiopia Directorate</option>
                   </select>
                 </div>
 
-                <div className="flex items-center gap-2.5 pt-6">
-                  <input
-                    type="checkbox"
-                    id="inviteUserCreate"
-                    checked={form.invite_user}
-                    onChange={(e) => update("invite_user", e.target.checked)}
-                    className="rounded border-border text-primary focus:ring-primary h-4 w-4"
-                  />
-                  <label htmlFor="inviteUserCreate" className="text-xs font-medium text-foreground cursor-pointer select-none">
-                    Send portal invitation link to patient's registered email
-                  </label>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 3: Primary Residence Address */}
-          <Card className="shadow-2xs overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600">
-                  <Icon icon="solar:map-point-bold-duotone" size={20} />
-                </div>
-                <div>
-                  <CardTitle className="text-xs font-bold">Primary Residential Address</CardTitle>
-                  <CardDescription className="text-xs">
-                    Physical location for home care, postal correspondence, and regional health jurisdiction
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Address Line 1</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.address}
-                    onChange={(e) => update("address", e.target.value)}
-                    placeholder="Street, Woreda, Kebele, House #"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Address Line 2 (Optional)</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.address_line_2}
-                    onChange={(e) => update("address_line_2", e.target.value)}
-                    placeholder="Apartment, Suite, Landmark"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                 <div>
                   <Label className="text-xs font-semibold text-foreground">City / Town</Label>
                   <Input
@@ -618,35 +734,81 @@ export default function PatientCreatePage() {
                     placeholder="e.g., Addis Ababa"
                   />
                 </div>
+
                 <div>
-                  <Label className="text-xs font-semibold text-foreground">State / Region</Label>
+                  <Label className="text-xs font-semibold text-foreground">Workstation / Depot Station</Label>
                   <Input
                     className="mt-1.5 h-9 text-xs"
-                    value={form.state}
-                    onChange={(e) => update("state", e.target.value)}
-                    placeholder="e.g., Oromia"
+                    value={form.eeu_work_station}
+                    onChange={(e) => update("eeu_work_station", e.target.value)}
+                    placeholder="e.g., Kality 230kV Substation Bay 4"
                   />
                 </div>
+              </div>
+
+              {/* Physical Street Address & Communication Prefs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
-                  <Label className="text-xs font-semibold text-foreground">PIN / Postal Code</Label>
+                  <Label className="text-xs font-semibold text-foreground">Street Address / Kebele / House #</Label>
                   <Input
                     className="mt-1.5 h-9 text-xs"
-                    value={form.pincode}
-                    onChange={(e) => update("pincode", e.target.value)}
-                    placeholder="e.g., 1000"
+                    value={form.address}
+                    onChange={(e) => update("address", e.target.value)}
+                    placeholder="Street, Woreda, Kebele, House #"
                   />
                 </div>
+
                 <div>
-                  <Label className="text-xs font-semibold text-foreground">Country</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.country}
-                    onChange={(e) => update("country", e.target.value)}
-                  />
+                  <Label className="text-xs font-semibold text-foreground">Report Preference & Portal</Label>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <select
+                      className="flex-1 border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                      value={form.report_preference}
+                      onChange={(e) => update("report_preference", e.target.value)}
+                    >
+                      <option value="Email">Email (PDF Report)</option>
+                      <option value="Patient Portal">Patient Portal</option>
+                      <option value="Print">Counter Print</option>
+                    </select>
+
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={form.invite_user}
+                        onChange={(e) => update("invite_user", e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                      />
+                      <span>Invite Portal</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Quick Bulk Import Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/25">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Icon icon="solar:file-smile-bold-duotone" size={20} />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-foreground">Need to add employees in bulk from a spreadsheet?</div>
+                <p className="text-[11px] text-muted-foreground">
+                  Upload an Excel (.xlsx or .csv) file to auto-enroll multiple staff members with validation.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setShowBulkImport(true)}
+              className="h-8 text-xs font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 shadow-xs"
+            >
+              <Icon icon="solar:upload-track-2-bold" size={14} />
+              Bulk Import Spreadsheet
+            </Button>
+          </div>
         </div>
       )}
 
@@ -805,391 +967,8 @@ export default function PatientCreatePage() {
         </div>
       )}
 
-      {/* ─── TAB 3: EEU / EEP Employment & Medical Scheme ─── */}
-      {activeTab === "eeu" && (
-        <div className="space-y-6">
-          {/* Card 1: Corporate Employer Selection */}
-          <Card className="shadow-2xs overflow-hidden border-primary/20">
-            <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                  <Icon icon="solar:buildings-2-bold-duotone" size={20} />
-                </div>
-                <div>
-                  <CardTitle className="text-xs font-bold">Corporate Employer Affiliation</CardTitle>
-                  <CardDescription className="text-xs">
-                    Designate whether the patient is an employee/dependent of EEU or EEP for health scheme allocation
-                  </CardDescription>
-                </div>
-              </div>
-              <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider text-primary border-primary/30">
-                Scheme Sponsor
-              </Badge>
-            </CardHeader>
-            <CardContent className="p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Option 1: EEU */}
-                <div
-                  onClick={() => handleCompanyChange("Ethiopian Electric Utility (EEU)")}
-                  className={cn(
-                    "relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3",
-                    !form.company_affiliation?.includes("EEP") && !form.company_affiliation?.includes("Contractor") && !form.company_affiliation?.includes("Other")
-                      ? "border-emerald-500 bg-emerald-500/5 shadow-xs"
-                      : "border-border/60 hover:border-emerald-500/40 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
-                      <Icon icon="solar:transmission-bold-duotone" size={24} />
-                    </div>
-                    {!form.company_affiliation?.includes("EEP") && !form.company_affiliation?.includes("Contractor") && !form.company_affiliation?.includes("Other") && (
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-foreground">Ethiopian Electric Utility (EEU)</div>
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      Power retail, national distribution network, regional metering & local substation operations.
-                    </p>
-                  </div>
-                  <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">ID Prefix:</span>
-                    <Badge variant="outline" className="font-mono font-bold text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                      EEU-657854
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Option 2: EEP */}
-                <div
-                  onClick={() => handleCompanyChange("Ethiopian Electric Power (EEP)")}
-                  className={cn(
-                    "relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3",
-                    form.company_affiliation?.includes("EEP")
-                      ? "border-sky-500 bg-sky-500/5 shadow-xs"
-                      : "border-border/60 hover:border-sky-500/40 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0">
-                      <Icon icon="solar:water-bold-duotone" size={24} />
-                    </div>
-                    {form.company_affiliation?.includes("EEP") && (
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-sky-500/20" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-foreground">Ethiopian Electric Power (EEP)</div>
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      Power generation dams (GERD, Gilgel Gibe, Tekeze), high-voltage grids (400kV/500kV) & major transmission.
-                    </p>
-                  </div>
-                  <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">ID Prefix:</span>
-                    <Badge variant="outline" className="font-mono font-bold text-sky-700 dark:text-sky-300 border-sky-500/30">
-                      EEP-765767
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Option 3: Construction / Contractor / Other */}
-                <div
-                  onClick={() => handleCompanyChange("Contractor / Other")}
-                  className={cn(
-                    "relative p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3",
-                    (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                      ? "border-amber-500 bg-amber-500/5 shadow-xs"
-                      : "border-border/60 hover:border-amber-500/40 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 shrink-0">
-                      <Icon icon="solar:hammer-and-wrench-bold-duotone" size={24} />
-                    </div>
-                    {(form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other")) && (
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-4 ring-amber-500/20" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-foreground">Construction / Contractor / Other</div>
-                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      External construction civil works, transmission line contractors & infrastructure subcontractors.
-                    </p>
-                  </div>
-                  <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">ID Prefix:</span>
-                    <Badge variant="outline" className="font-mono font-bold text-amber-700 dark:text-amber-300 border-amber-500/30">
-                      others-578879
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: Staff Details, Directorate & Cadre */}
-          <Card className={cn(
-            "shadow-2xs overflow-hidden border",
-            form.company_affiliation?.includes("EEP") ? "border-sky-500/30" : "border-emerald-500/30"
-          )}>
-            <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  "p-2 rounded-xl",
-                  form.company_affiliation?.includes("EEP") ? "bg-sky-500/10 text-sky-600" : "bg-emerald-500/10 text-emerald-600"
-                )}>
-                  <Icon icon={form.company_affiliation?.includes("EEP") ? "solar:bolt-bold-duotone" : "solar:buildings-bold-duotone"} size={20} />
-                </div>
-                <div>
-                  <CardTitle className="text-xs font-bold">
-                    {form.company_affiliation?.includes("EEP")
-                      ? "Ethiopian Electric Power (EEP) Occupational Profile"
-                      : "Ethiopian Electric Utility (EEU) Occupational Profile"}
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    {form.company_affiliation?.includes("EEP")
-                      ? "Power generation station, dam project, 400kV transmission hub, and payroll links"
-                      : "Staff payroll identification, directorate, regional workstation, and medical scheme tiers"}
-                  </CardDescription>
-                </div>
-              </div>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[10px] font-bold uppercase",
-                  form.company_affiliation?.includes("EEP")
-                    ? "text-sky-600 dark:text-sky-400 border-sky-500/30"
-                    : "text-emerald-600 border-emerald-500/30"
-                )}
-              >
-                {form.company_affiliation?.includes("EEP") ? "EEP Health Beneficiary" : "EEU Health Directorate"}
-              </Badge>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">
-                    {form.company_affiliation?.includes("EEP")
-                      ? "EEP Staff / Payroll ID"
-                      : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                      ? "Contractor / Construction ID"
-                      : "EEU Staff / Payroll ID"}
-                  </Label>
-                  <div className="flex items-center mt-1.5">
-                    <span
-                      className={cn(
-                        "inline-flex items-center px-3 h-9 rounded-l-lg border border-r-0 text-xs font-mono font-bold tracking-wider select-none shrink-0",
-                        form.company_affiliation?.includes("EEP")
-                          ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                          : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                      )}
-                    >
-                      {getCompanyPrefix(form.company_affiliation)}
-                    </span>
-                    <Input
-                      className="h-9 text-xs font-mono rounded-l-none"
-                      value={extractStaffNumber(form.eeu_staff_id)}
-                      onChange={(e) => {
-                        const clean = extractStaffNumber(e.target.value).replace(/[^0-9A-Za-z-]/g, "").trim();
-                        update("eeu_staff_id", clean ? `${getCompanyPrefix(form.company_affiliation)}${clean}` : "");
-                      }}
-                      placeholder={
-                        form.company_affiliation?.includes("EEP")
-                          ? "e.g. 765767"
-                          : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                          ? "e.g. 578879"
-                          : "e.g. 657854"
-                      }
-                    />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground mt-1 block">
-                    System identifier:{" "}
-                    <strong className="font-mono text-foreground font-semibold">
-                      {form.eeu_staff_id || `${getCompanyPrefix(form.company_affiliation)}[number]`}
-                    </strong>
-                  </span>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Directorate / Department</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.eeu_department}
-                    onChange={(e) => update("eeu_department", e.target.value)}
-                  >
-                    {form.company_affiliation?.includes("EEP") ? (
-                      <>
-                        <option value="Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)">Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)</option>
-                        <option value="High-Voltage Transmission Grid Directorate (400kV / 500kV)">High-Voltage Transmission Grid Directorate (400kV / 500kV)</option>
-                        <option value="Substation Automation, SCADA & Protection Directorate">Substation Automation, SCADA & Protection Directorate</option>
-                        <option value="Dam & Project Operations (GERD / Gibe III / Tekeze)">Dam & Project Operations (GERD / Gibe III / Tekeze)</option>
-                        <option value="Electro-Mechanical Engineering & Maintenance">Electro-Mechanical Engineering & Maintenance</option>
-                        <option value="Wind & Geothermal Projects Directorate">Wind & Geothermal Projects Directorate</option>
-                        <option value="Fleet, Heavy Machinery & Regional Logistics">Fleet, Heavy Machinery & Regional Logistics</option>
-                        <option value="Corporate Human Resources & Administration">Corporate Human Resources & Administration</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="Distribution Directorate">Distribution Directorate</option>
-                        <option value="Transmission Grid Directorate">Transmission Grid Directorate</option>
-                        <option value="Generation & Hydro Plants">Generation & Hydro Plants</option>
-                        <option value="Customer Services & Metering">Customer Services & Metering</option>
-                        <option value="Inspection & Energy Loss Directorate">Inspection & Energy Loss Directorate</option>
-                        <option value="Fleet, Logistics & Stores">Fleet, Logistics & Stores</option>
-                        <option value="Human Resources & Administration">Human Resources & Administration</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Cadre / Job Role</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.eeu_cadre}
-                    onChange={(e) => update("eeu_cadre", e.target.value)}
-                    placeholder={
-                      form.company_affiliation?.includes("EEP")
-                        ? "e.g., Hydro Turbine Engineer, 400kV Substation Operator"
-                        : "e.g., Senior Lineman, Substation Electrician"
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Operational Region / Basin</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.eeu_region}
-                    onChange={(e) => update("eeu_region", e.target.value)}
-                  >
-                    <option value="Addis Ababa">Addis Ababa (Head Office / Central Hub)</option>
-                    <option value="Oromia">Oromia (Gibe / Melka Wakena)</option>
-                    <option value="Amhara">Amhara (Fincha / Tis Abay)</option>
-                    <option value="Benishangul-Gumuz">Benishangul-Gumuz (GERD Site)</option>
-                    <option value="Sidama">Sidama</option>
-                    <option value="Somali">Somali</option>
-                    <option value="Tigray">Tigray (Tekeze)</option>
-                    <option value="Dire Dawa">Dire Dawa</option>
-                    <option value="South West Ethiopia">South West Ethiopia (Gibe III / Koysha)</option>
-                    <option value="Central Ethiopia">Central Ethiopia</option>
-                    <option value="Afar">Afar (Tendaho / Geothermal)</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Workstation / Dam Site / Substation</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.eeu_work_station}
-                    onChange={(e) => update("eeu_work_station", e.target.value)}
-                    placeholder={
-                      form.company_affiliation?.includes("EEP")
-                        ? "e.g., GERD Dam Site Powerhouse / Sululta 400kV Bay"
-                        : "e.g., Kality 230kV Substation Bay 4 / AA North CSC"
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Beneficiary Type</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.eeu_beneficiary_type}
-                    onChange={(e) => update("eeu_beneficiary_type", e.target.value)}
-                  >
-                    <option value="Staff">
-                      {form.company_affiliation?.includes("EEP") ? "EEP Primary Staff" : "EEU Primary Staff"}
-                    </option>
-                    <option value="Spouse">Dependent Spouse</option>
-                    <option value="Child">Dependent Child</option>
-                    <option value="Dependent Parent">Dependent Parent</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {form.eeu_beneficiary_type !== "Staff" && (
-                  <div>
-                    <Label className="text-xs font-semibold text-foreground">
-                      {form.company_affiliation?.includes("EEP")
-                        ? "EEP Sponsor Staff ID"
-                        : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                        ? "Sponsor Contractor ID"
-                        : "EEU Sponsor Staff ID"}
-                    </Label>
-                    <div className="flex items-center mt-1.5">
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-3 h-9 rounded-l-lg border border-r-0 text-xs font-mono font-bold tracking-wider select-none shrink-0",
-                          form.company_affiliation?.includes("EEP")
-                            ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                            : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                        )}
-                      >
-                        {getCompanyPrefix(form.company_affiliation)}
-                      </span>
-                      <Input
-                        className="h-9 text-xs font-mono rounded-l-none"
-                        value={extractStaffNumber(form.eeu_primary_staff_id)}
-                        onChange={(e) => {
-                          const clean = extractStaffNumber(e.target.value).replace(/[^0-9A-Za-z-]/g, "").trim();
-                          update("eeu_primary_staff_id", clean ? `${getCompanyPrefix(form.company_affiliation)}${clean}` : "");
-                        }}
-                        placeholder={
-                          form.company_affiliation?.includes("EEP")
-                            ? "e.g. 765767"
-                            : (form.company_affiliation?.includes("Contractor") || form.company_affiliation?.includes("Other"))
-                            ? "e.g. 578879"
-                            : "e.g. 657854"
-                        }
-                      />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground mt-1 block">
-                      Sponsor identifier:{" "}
-                      <strong className="font-mono text-foreground font-semibold">
-                        {form.eeu_primary_staff_id || `${getCompanyPrefix(form.company_affiliation)}[number]`}
-                      </strong>
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Medical Scheme Coverage</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.eeu_medical_coverage_status}
-                    onChange={(e) => update("eeu_medical_coverage_status", e.target.value)}
-                  >
-                    <option value="Active Coverage">Active Coverage</option>
-                    <option value="Special Approval">Special Approval</option>
-                    <option value="Exceeded Ceiling">Exceeded Ceiling</option>
-                    <option value="Suspended">Suspended</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Occupational Climbing / Safety Fitness</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.eeu_climbing_fitness_status}
-                    onChange={(e) => update("eeu_climbing_fitness_status", e.target.value)}
-                  >
-                    <option value="Fit to Climb">Fit to Climb / High-Elevation Certified</option>
-                    <option value="Restricted Ground Duty">Restricted Ground Duty</option>
-                    <option value="Temporarily Unfit">Temporarily Unfit</option>
-                    <option value="Pending Annual Assessment">Pending Annual Assessment</option>
-                    <option value="Not Applicable">Not Applicable (Office / Administrative)</option>
-                  </select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ─── TAB 4: Risk Factors & Account Setup ─── */}
-      {activeTab === "account" && (
+      {/* ─── TAB 3: Lifestyle & Clinical Notes ─── */}
+      {activeTab === "lifestyle" && (
         <div className="space-y-6">
           {/* Card 1: Personal, Social & Lifestyle Risk Factors */}
           <Card className="shadow-2xs overflow-hidden">
@@ -1199,40 +978,14 @@ export default function PatientCreatePage() {
                   <Icon icon="solar:user-hand-up-bold-duotone" size={20} />
                 </div>
                 <div>
-                  <CardTitle className="text-xs font-bold">Personal, Social & Lifestyle Risk Factors</CardTitle>
+                  <CardTitle className="text-xs font-bold">Lifestyle Exposures & Environmental Risk Factors</CardTitle>
                   <CardDescription className="text-xs">
-                    Occupation, marital status, and substance exposures
+                    Substance consumption history and environmental occupational risks
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-5 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Occupation & Profession</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.occupation}
-                    onChange={(e) => update("occupation", e.target.value)}
-                    placeholder="e.g., Accountant, Builder, Driver..."
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Marital Status</Label>
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-xs mt-1.5 bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                    value={form.marital_status}
-                    onChange={(e) => update("marital_status", e.target.value)}
-                  >
-                    <option value="">Select Marital Status</option>
-                    <option value="Single">Single</option>
-                    <option value="Married">Married</option>
-                    <option value="Divorced">Divorced</option>
-                    <option value="Widowed">Widowed</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
 
               {/* Substance exposure */}
               <div className="p-4 rounded-xl border bg-muted/10 space-y-4">
@@ -1319,53 +1072,7 @@ export default function PatientCreatePage() {
             </CardContent>
           </Card>
 
-          {/* Card 2: Commercial & Billing Configuration */}
-          <Card className="shadow-2xs overflow-hidden">
-            <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600">
-                  <Icon icon="solar:wallet-money-bold-duotone" size={20} />
-                </div>
-                <div>
-                  <CardTitle className="text-xs font-bold">Commercial & Billing Classification</CardTitle>
-                  <CardDescription className="text-xs">
-                    Customer ledger grouping, regional territory, and standard sales price lists
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Customer Group</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.customer_group}
-                    onChange={(e) => update("customer_group", e.target.value)}
-                    placeholder="All Customers"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Territory</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.territory}
-                    onChange={(e) => update("territory", e.target.value)}
-                    placeholder="All Territories"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Default Price List</Label>
-                  <Input
-                    className="mt-1.5 h-9 text-xs"
-                    value={form.default_price_list}
-                    onChange={(e) => update("default_price_list", e.target.value)}
-                    placeholder="Standard Selling"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+
 
           {/* Card 3: Clinical Intake Notes */}
           <Card className="shadow-2xs overflow-hidden">
@@ -1430,10 +1137,10 @@ export default function PatientCreatePage() {
               onClick={() => setActiveTab("demographics")}
               className="text-xs h-8 gap-1"
             >
-              ← Back: Demographics
+              ← Back: Demographics & Scheme
             </Button>
           )}
-          {activeTab === "eeu" && (
+          {activeTab === "lifestyle" && (
             <Button
               variant="outline"
               size="sm"
@@ -1441,16 +1148,6 @@ export default function PatientCreatePage() {
               className="text-xs h-8 gap-1"
             >
               ← Back: Medical Baseline
-            </Button>
-          )}
-          {activeTab === "account" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveTab("eeu")}
-              className="text-xs h-8 gap-1"
-            >
-              ← Back: EEU Profile
             </Button>
           )}
 
@@ -1472,19 +1169,10 @@ export default function PatientCreatePage() {
           {activeTab === "medical" && (
             <Button
               size="sm"
-              onClick={() => setActiveTab("eeu")}
+              onClick={() => setActiveTab("lifestyle")}
               className="h-8 text-xs font-semibold gap-1 bg-muted hover:bg-muted/80 text-foreground"
             >
-              Next: EEU Profile →
-            </Button>
-          )}
-          {activeTab === "eeu" && (
-            <Button
-              size="sm"
-              onClick={() => setActiveTab("account")}
-              className="h-8 text-xs font-semibold gap-1 bg-muted hover:bg-muted/80 text-foreground"
-            >
-              Next: Risk & Account →
+              Next: Lifestyle & Clinical Notes →
             </Button>
           )}
 
@@ -1507,6 +1195,12 @@ export default function PatientCreatePage() {
           </Button>
         </div>
       </div>
+
+      <BulkEmployeeImportModal
+        open={showBulkImport}
+        onOpenChange={setShowBulkImport}
+        onSuccess={() => navigate("/healthcare/patients")}
+      />
     </div>
   );
 }

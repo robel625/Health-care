@@ -62,9 +62,9 @@ function LoginPage() {
 
 						<LoginProvider>
 							<LoginForm />
-							<MobileForm />
+							{/* <MobileForm />
 							<QrCodeFrom />
-							<RegisterForm />
+							<RegisterForm /> */}
 							<ResetForm />
 						</LoginProvider>
 

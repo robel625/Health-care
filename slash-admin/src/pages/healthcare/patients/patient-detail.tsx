@@ -11,27 +11,33 @@ import DocumentTimeline, { parseTimelineDate } from "@/components/healthcare/Doc
 import ActivityHeatmap from "@/components/healthcare/ActivityHeatmap";
 import Avatar from "@/components/Avatar";
 import { getInitials, cn } from "@/utils";
-import { formatAge } from "@/utils/age";
-import type { Patient, PatientRelation, InpatientRecord, ServiceRequest } from "@/api/services/healthcareService";
+import { formatAge, formatAgeYears } from "@/utils/age";
+import type { Patient, PatientRelation, ServiceRequest } from "@/api/services/healthcareService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
 import { Badge } from "@/ui/badge";
 import { toast } from "sonner";
-import InpatientAdmissionModal from "@/pages/healthcare/inpatient/components/InpatientAdmissionModal";
-import InpatientRecordsModal from "@/pages/healthcare/inpatient/components/InpatientRecordsModal";
-import ActiveInpatientBanner from "@/pages/healthcare/inpatient/components/ActiveInpatientBanner";
 import NewMedicationRequestModal from "@/pages/healthcare/pharmacy/components/NewMedicationRequestModal";
-import NewTherapyPlanModal from "@/pages/healthcare/clinical/components/NewTherapyPlanModal";
-import NewTherapySessionModal from "@/pages/healthcare/clinical/components/NewTherapySessionModal";
-import EEUMedicalIdCardModal from "@/pages/healthcare/occupational/components/EEUMedicalIdCardModal";
+import { useHealthcareRoles } from "@/utils/permissions";
 
-type Tab = "details" | "eeu" | "dashboard" | "diagnostics" | "address" | "medical";
+type Tab = "details" | "dashboard" | "diagnostics" | "address" | "medical";
 
 export default function PatientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const {
+    isReceptionist,
+    isDoctor,
+    isLabTech,
+    isPharmacist,
+    isAdmin,
+    canViewClinical,
+    canViewConfidential,
+  } = useHealthcareRoles();
+
   const [patient, setPatient] = useState<Patient | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState<{ denied: boolean; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({});
   const [relations, setRelations] = useState<PatientRelation[]>([]);
@@ -40,19 +46,9 @@ export default function PatientDetailPage() {
   const [activity, setActivity] = useState<any[]>([]);
   const [patientLabs, setPatientLabs] = useState<any[]>([]);
 
-  // Inpatient state (Marley Parity)
-  const [patientInpatients, setPatientInpatients] = useState<InpatientRecord[]>([]);
-  const [showInpatientRecordsModal, setShowInpatientRecordsModal] = useState(false);
-  const [showAdmissionModal, setShowAdmissionModal] = useState(false);
-
-  // Medication Request Modal (Marley Parity)
+  // Medication Request Modal
   const [newMedReqModalOpen, setNewMedReqModalOpen] = useState(false);
-  // Therapy Modals (Marley Parity)
-  const [newTherapyPlanModalOpen, setNewTherapyPlanModalOpen] = useState(false);
-  const [newTherapySessionModalOpen, setNewTherapySessionModalOpen] = useState(false);
 
-  // EEU Digital Medical ID Card Modal
-  const [showIdCardModal, setShowIdCardModal] = useState(false);
 
   // Service Requests (Marley Parity)
   const [patientServiceRequests, setPatientServiceRequests] = useState<ServiceRequest[]>([]);
@@ -64,11 +60,10 @@ export default function PatientDetailPage() {
   // Patient-specific transaction counts for dashboard
   const [txCounts, setTxCounts] = useState({
     appointments: 0, encounters: 0, vitals: 0, prescriptions: 0,
-    labTests: 0, sampleCollections: 0, therapyPlans: 0, therapySessions: 0,
-    inpatient: 0, observations: 0, medicationRequests: 0, serviceRequests: 0,
+    labTests: 0, sampleCollections: 0,
+    observations: 0, medicationRequests: 0, serviceRequests: 0,
   });
   const [medicalRecords, setMedicalRecords] = useState<any[]>([]);
-  const [feeValidities, setFeeValidities] = useState<any[]>([]);
 
   // Diagnostics Tab Filter & Search
   const [diagnosticsSearchQuery, setDiagnosticsSearchQuery] = useState("");
@@ -94,18 +89,14 @@ export default function PatientDetailPage() {
       } catch { setRelations([]); }
 
       // Load patient transactions in parallel (with results up to 100 for timeline & heatmap)
-      const [apptRes, encRes, vsRes, rxRes, labRes, thRes, thSessRes, inptRes, obsRes, pmrRes, fvRes, medReqRes, sampleColRes, srRes] = await Promise.all([
+      const [apptRes, encRes, vsRes, rxRes, labRes, obsRes, pmrRes, medReqRes, sampleColRes, srRes] = await Promise.all([
         HealthcareApi.appointments.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.encounters.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.vitalSigns.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.prescriptions.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.labTests.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
-        HealthcareApi.therapyPlans.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
-        HealthcareApi.therapySessions.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
-        HealthcareApi.inpatientRecords.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.observations.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.medicalRecords.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
-        HealthcareApi.feeValidities.list({ patient: pid, page_size: 50 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.medicationRequests.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.sampleCollections.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
         HealthcareApi.serviceRequests.list({ patient: pid, page_size: 100 }).catch(() => ({ results: [], count: 0 })),
@@ -116,12 +107,8 @@ export default function PatientDetailPage() {
       const vitals = (vsRes as any).results || [];
       const rxs = (rxRes as any).results || [];
       const labs = (labRes as any).results || [];
-      const thPlans = (thRes as any).results || [];
-      const thSessions = (thSessRes as any).results || [];
-      const inpts = (inptRes as any).results || [];
       const obss = (obsRes as any).results || [];
       const pmrs = (pmrRes as any).results || [];
-      const fvs = (fvRes as any).results || [];
       const medReqs = (medReqRes as any).results || [];
       const sampleCols = (sampleColRes as any).results || [];
       const srs = (srRes as any).results || [];
@@ -134,17 +121,12 @@ export default function PatientDetailPage() {
         medicationRequests: medReqRes.count ?? medReqs.length,
         sampleCollections: sampleColRes.count ?? sampleCols.length,
         labTests: labRes.count ?? labs.length,
-        therapyPlans: thRes.count ?? thPlans.length,
-        therapySessions: thSessRes.count ?? thSessions.length,
-        inpatient: inptRes.count ?? inpts.length,
         observations: obsRes.count ?? obss.length,
         serviceRequests: srRes.count ?? srs.length,
       });
 
       setMedicalRecords(pmrs);
-      setFeeValidities(fvs);
       setPatientLabs(labs);
-      setPatientInpatients(inpts);
       setPatientServiceRequests(srs);
 
       // Build real activity timeline from actual patient transactions
@@ -209,39 +191,6 @@ export default function PatientDetailPage() {
           reference_doctype: "Drug Prescription",
           reference_name: String(rx.id),
           user: rx.practitioner_name || rx.owner || "",
-        });
-      }
-
-      for (const th of thPlans) {
-        realActivity.push({
-          id: `th-${th.id}`,
-          text: `Therapy Plan: ${th.therapy_type_name || 'Therapy'} · Status: ${th.status || 'Draft'}`,
-          time: th.creation || th.start_date,
-          reference_doctype: "Therapy Plan",
-          reference_name: th.therapy_plan_id || String(th.id),
-          user: th.owner || "",
-        });
-      }
-
-      for (const ts of thSessions) {
-        realActivity.push({
-          id: `ts-${ts.id}`,
-          text: `Therapy Session: ${ts.therapy_type_name || ts.therapy_type || 'Therapy'} · Status: ${ts.status || 'Completed'}`,
-          time: ts.creation || ts.session_date || ts.date,
-          reference_doctype: "Therapy Session",
-          reference_name: ts.therapy_session_id || String(ts.id),
-          user: ts.practitioner_name || ts.owner || "",
-        });
-      }
-
-      for (const inp of inpts) {
-        realActivity.push({
-          id: `inp-${inp.id}`,
-          text: `Inpatient Record: ${inp.service_unit_name || inp.service_unit || 'Ward'} · Status: ${inp.status || 'Admitted'}`,
-          time: inp.creation || inp.admit_date,
-          reference_doctype: "Inpatient Record",
-          reference_name: inp.inpatient_record_id || String(inp.id),
-          user: inp.owner || "",
         });
       }
 
@@ -321,9 +270,19 @@ export default function PatientDetailPage() {
         const timeB = b.time ? parseTimelineDate(b.time).getTime() : 0;
         return timeB - timeA;
       });
-      setActivity(realActivity);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      console.error(err);
+      if (err?.status === 403 || err?.response?.status === 403 || err?.status === 404 || err?.response?.status === 404) {
+        setAccessDenied({
+          denied: true,
+          message:
+            err?.response?.data?.detail ||
+            "Access Restricted: You are not authorized to view this patient's clinical file. Only treating practitioners with active care assignments, receptionists managing registration, or authorized care coordinators may access this record.",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { loadPatient(); }, [loadPatient]);
@@ -336,21 +295,6 @@ export default function PatientDetailPage() {
       setPatient({ ...patient!, ...form } as Patient);
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
-  };
-
-  const [invoicing, setInvoicing] = useState(false);
-  const handleInvoiceRegistration = async () => {
-    if (!patient) return;
-    setInvoicing(true);
-    try {
-      const res = await HealthcareApi.patients.invoiceRegistration(patient.id);
-      alert(res.message || "Registration invoice created successfully");
-      loadPatient();
-    } catch (err: any) {
-      alert(err?.message || "Failed to create registration invoice");
-    } finally {
-      setInvoicing(false);
-    }
   };
 
   // Address modal state
@@ -465,7 +409,7 @@ export default function PatientDetailPage() {
     if (availablePatients.length === 0) {
       HealthcareApi.patients.list({ page_size: 200 }).then((res) => {
         setAvailablePatients((res.results || []).filter((p) => p.id !== Number(id)));
-      }).catch(() => {});
+      }).catch(() => { });
     }
     setShowRelationModal(true);
   };
@@ -578,7 +522,7 @@ export default function PatientDetailPage() {
 
   const handleLaunchDownstream = (
     sr: ServiceRequest,
-    actionType: "lab" | "procedure" | "therapy" | "sample" | "appointment"
+    actionType: "lab" | "procedure" | "sample" | "appointment"
   ) => {
     if (!patient) return;
     if (actionType === "lab") {
@@ -593,8 +537,6 @@ export default function PatientDetailPage() {
           sr.reference_name || sr.title || ""
         )}`
       );
-    } else if (actionType === "therapy") {
-      setNewTherapySessionModalOpen(true);
     } else if (actionType === "sample") {
       navigate(
         `/healthcare/sample-collections/new?patient=${patient.id}&service_request=${sr.id}`
@@ -609,11 +551,11 @@ export default function PatientDetailPage() {
   const filteredMedicalRecords = useMemo(() => {
     return medicalRecords.filter((rec) => {
       const query = medicalRecordSearch.toLowerCase().trim();
-      const matchesSearch = !query || 
+      const matchesSearch = !query ||
         (rec.subject?.toLowerCase().includes(query)) ||
         (rec.content?.toLowerCase().includes(query)) ||
         (rec.reference_doctype?.toLowerCase().includes(query));
-        
+
       if (!matchesSearch) return false;
 
       if (medicalRecordTypeFilter === "all") return true;
@@ -680,54 +622,152 @@ export default function PatientDetailPage() {
     );
   }
 
-  const isEEP = Boolean(
-    (form.company_affiliation || patient.company_affiliation || "").includes("EEP") ||
-    (form.eeu_staff_id || patient.eeu_staff_id || "").startsWith("EEP")
+  const isEEFC = Boolean(
+    (form.company_affiliation || patient.company_affiliation || "").includes("EEFC") ||
+    (form.company_affiliation || patient.company_affiliation || "").includes("Football") ||
+    (form.eeu_staff_id || patient.eeu_staff_id || "").startsWith("EEFC")
   );
 
-  const isContractor = Boolean(
-    (form.company_affiliation || patient.company_affiliation || "").includes("Contractor") ||
+  const isRetired = Boolean(
+    (form.company_affiliation || patient.company_affiliation || "").includes("Retired") ||
+    (form.eeu_staff_id || patient.eeu_staff_id || "").startsWith("RET")
+  );
+
+  const isOthers = Boolean(
     (form.company_affiliation || patient.company_affiliation || "").includes("Other") ||
+    (form.company_affiliation || patient.company_affiliation || "").includes("Contractor") ||
     (form.eeu_staff_id || patient.eeu_staff_id || "").startsWith("others")
   );
 
-  const tabs: { key: Tab; label: string; icon: string; count?: number }[] = [
-    { key: "details", label: "Details", icon: "solar:user-id-bold-duotone" },
-    {
-      key: "eeu",
-      label: isEEP ? "EEP Staff Profile" : isContractor ? "Contractor Profile" : "EEU Staff Profile",
-      icon: isEEP ? "solar:bolt-bold-duotone" : isContractor ? "solar:user-id-bold-duotone" : "solar:buildings-bold-duotone",
-    },
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      icon: "solar:chart-2-bold-duotone",
-      count: txCounts.encounters + txCounts.appointments + txCounts.vitals,
-    },
-    {
-      key: "diagnostics",
-      label: "Lab & Diagnostics",
-      icon: "solar:test-tube-bold-duotone",
-      count: patientServiceRequests.length + patientLabs.length,
-    },
-    {
+  const tabs: { key: Tab; label: string; icon: string; count?: number }[] = useMemo(() => {
+    const list: { key: Tab; label: string; icon: string; count?: number }[] = [
+      { key: "details", label: "Details", icon: "solar:user-id-bold-duotone" },
+    ];
+
+    // Receptionists do not access clinical dashboards or diagnostic findings
+    if (!isReceptionist || isAdmin) {
+      if (canViewClinical || isDoctor || isAdmin) {
+        list.push({
+          key: "dashboard",
+          label: "Dashboard",
+          icon: "solar:chart-2-bold-duotone",
+          count: txCounts.encounters + txCounts.appointments + txCounts.vitals,
+        });
+      }
+
+      if (isLabTech || canViewClinical || isDoctor || isAdmin) {
+        list.push({
+          key: "diagnostics",
+          label: "Lab & Diagnostics",
+          icon: "solar:test-tube-bold-duotone",
+          count: patientLabs.length,
+        });
+      }
+    }
+
+    list.push({
       key: "address",
       label: "Address & Contact",
       icon: "solar:map-point-bold-duotone",
       count: relations.length,
-    },
-    {
-      key: "medical",
-      label: "Medical History",
-      icon: "solar:medical-kit-bold-duotone",
-      count: medicalRecords.length || (form.allergies ? 1 : undefined),
-    },
-  ];
+    });
 
-  const calculatedAge = formatAge(form.dob || patient.dob, patient.age);
+    // Medical history is strictly clinical - hidden for Receptionists and Lab Techs
+    if (!isReceptionist && !isLabTech && (canViewClinical || isDoctor || isPharmacist || isAdmin)) {
+      list.push({
+        key: "medical",
+        label: isPharmacist && !isDoctor ? "Medications & Allergies" : "Medical History",
+        icon: "solar:medical-kit-bold-duotone",
+        count: medicalRecords.length || (form.allergies ? 1 : undefined),
+      });
+    }
+
+    return list;
+  }, [
+    isReceptionist,
+    isDoctor,
+    isLabTech,
+    isPharmacist,
+    isAdmin,
+    canViewClinical,
+    txCounts,
+    patientLabs.length,
+    relations.length,
+    medicalRecords.length,
+    form.allergies,
+  ]);
+
+  useEffect(() => {
+    if (!tabs.some((t) => t.key === activeTab)) {
+      setActiveTab("details");
+    }
+  }, [tabs, activeTab]);
+
+  const calculatedAge = formatAgeYears(form.dob || patient?.dob, patient?.age);
+
+  if (loading) {
+    return (
+      <div className="flex h-60 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (accessDenied?.denied || !patient) {
+    return (
+      <Card className="max-w-2xl mx-auto my-12 border-rose-500/20 bg-card shadow-lg">
+        <CardHeader className="text-center pb-2">
+          <div className="w-14 h-14 mx-auto rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center mb-3">
+            <Icon icon="solar:shield-warning-bold-duotone" size={32} />
+          </div>
+          <CardTitle className="text-lg font-bold text-foreground">Access Restricted</CardTitle>
+          <CardDescription className="text-xs mt-1 text-muted-foreground leading-relaxed max-w-md mx-auto">
+            {accessDenied?.message || "You do not have permission to view this patient's clinical file. Patient records are governed by Role-Based Access Control and care assignment rules."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center pt-4">
+          <Button onClick={() => navigate("/healthcare/patients")} variant="outline" className="gap-2 text-xs">
+            <Icon icon="solar:arrow-left-bold" size={14} />
+            Back to Patients List
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const accessScope = (patient as any)?.access_scope || {};
 
   return (
     <div className="space-y-5">
+      {/* ── Role & Confidentiality Advisory Banners ── */}
+      {isReceptionist && (
+        <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-900 dark:text-blue-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon icon="solar:info-circle-bold" size={18} className="text-blue-600 shrink-0" />
+            <span>
+              <strong>Administrative Access (Receptionist):</strong> You have permissions for patient registration, scheduling, check-in, and practitioner assignment. Clinical diagnoses, lab test results, and medical notes are protected.
+            </span>
+          </div>
+          <Badge variant="outline" className="border-blue-500/30 text-blue-700 dark:text-blue-300 shrink-0">
+            Demographics Only
+          </Badge>
+        </div>
+      )}
+
+      {isDoctor && !isAdmin && accessScope.has_care_relationship === false && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon icon="solar:shield-warning-bold" size={18} className="text-amber-600 shrink-0" />
+            <span>
+              <strong>Unassigned Consultation Mode:</strong> You are viewing this patient without an active care relationship assignment. Highly sensitive diagnoses and confidential clinical notes are restricted until care relationship is established.
+            </span>
+          </div>
+          <Badge variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-300 shrink-0">
+            Restricted Care View
+          </Badge>
+        </div>
+      )}
+
       {/* ── Executive Patient Identity & Hero Banner ────────────────────────── */}
       <div className="rounded-2xl border bg-card p-5 shadow-2xs transition-all">
         {/* Breadcrumb line */}
@@ -768,46 +808,23 @@ export default function PatientDetailPage() {
                 >
                   {patient.status || "Active"}
                 </Badge>
-                {patient.inpatient_status && (
-                  <button
-                    type="button"
-                    onClick={() => setShowInpatientRecordsModal(true)}
-                    className={cn(
-                      "text-xs px-2.5 py-0.5 rounded-full font-bold cursor-pointer transition-all inline-flex items-center gap-1.5 shadow-2xs hover:scale-102",
-                      patient.inpatient_status === "Admitted"
-                        ? "bg-rose-500/15 text-rose-600 border border-rose-500/30"
-                        : patient.inpatient_status === "Admission Scheduled"
-                        ? "bg-amber-500/15 text-amber-600 border border-amber-500/30"
-                        : "bg-blue-500/15 text-blue-600 border border-blue-500/30"
-                    )}
-                    title="Click to view Inpatient Records & Bed details"
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                    </span>
-                    <Icon icon="solar:hospital-bold" size={13} />
-                    <span>Inpatient: {patient.inpatient_status}</span>
-                    {patient.inpatient_service_unit_name && (
-                      <span className="font-semibold ml-0.5">· {patient.inpatient_service_unit_name}</span>
-                    )}
-                  </button>
-                )}
               </div>
 
-                {/* Clinical Quick Tags */}
+              {/* Clinical Quick Tags */}
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {(form.eeu_staff_id || patient.eeu_staff_id) && (
                   <span className={cn(
                     "inline-flex items-center gap-1 font-mono font-bold border px-2 py-0.5 rounded-md",
-                    isEEP
-                      ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                      : isContractor
-                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                      : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    isEEFC
+                      ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                      : isRetired
+                        ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                        : isOthers
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                   )}>
-                    <Icon icon={isEEP ? "solar:bolt-bold" : isContractor ? "solar:hammer-bold" : "solar:buildings-bold"} size={12} />
-                    {isEEP ? "EEP" : isContractor ? "others" : "EEU"}: {form.eeu_staff_id || patient.eeu_staff_id}
+                    <Icon icon={isEEFC ? "solar:football-bold" : isRetired ? "solar:user-heart-bold" : isOthers ? "solar:users-group-two-rounded-bold" : "solar:buildings-bold"} size={12} />
+                    {isEEFC ? "EEFC" : isRetired ? "RET" : isOthers ? "Others" : "EEU"}: {form.eeu_staff_id || patient.eeu_staff_id}
                   </span>
                 )}
                 {(form.eeu_climbing_fitness_status || patient.eeu_climbing_fitness_status) && (
@@ -839,10 +856,16 @@ export default function PatientDetailPage() {
                     {form.mobile}
                   </a>
                 )}
-                {form.allergies && (
+                {!isReceptionist && form.allergies && (
                   <span className="inline-flex items-center gap-1 font-bold text-rose-700 dark:text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded-md animate-pulse">
                     <Icon icon="solar:danger-triangle-bold" size={13} />
                     Allergies: {form.allergies.length > 30 ? `${form.allergies.slice(0, 30)}...` : form.allergies}
+                  </span>
+                )}
+                {(patient.has_confidential_records || accessScope.can_view_confidential) && (
+                  <span className="inline-flex items-center gap-1 font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md">
+                    <Icon icon="solar:shield-warning-bold" size={13} />
+                    Confidential Chart
                   </span>
                 )}
               </div>
@@ -860,39 +883,27 @@ export default function PatientDetailPage() {
               <Icon icon="solar:arrow-left-bold" size={14} />
               Back
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveTab("dashboard")}
-              className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold"
-            >
-              <Icon icon="solar:chart-2-bold" size={14} />
-              Patient Progress
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowIdCardModal(true)}
-              className="text-xs h-8 gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-semibold"
-              title="View and print official EEU Digital Medical ID card"
-            >
-              <Icon icon="solar:user-id-bold-duotone" size={14} />
-              EEU Medical ID
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleInvoiceRegistration}
-              disabled={invoicing}
-              className="text-xs h-8 gap-1.5 border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 font-semibold"
-            >
-              {invoicing ? (
-                <Icon icon="solar:refresh-bold" className="animate-spin" size={14} />
-              ) : (
-                <Icon icon="solar:bill-list-bold" size={14} />
-              )}
-              {invoicing ? "Invoicing..." : "Invoice Registration"}
-            </Button>
+            {isReceptionist ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/healthcare/appointments/new?patient=${patient.id}`)}
+                className="text-xs h-8 gap-1.5 border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 font-semibold"
+              >
+                <Icon icon="solar:calendar-add-bold" size={14} />
+                Schedule Appointment
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveTab("dashboard")}
+                className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold"
+              >
+                <Icon icon="solar:chart-2-bold" size={14} />
+                Patient Progress
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={handleSave}
@@ -904,7 +915,7 @@ export default function PatientDetailPage() {
               ) : (
                 <Icon icon="solar:check-read-bold" size={14} />
               )}
-              {saving ? "Saving..." : "Save Patient"}
+              {saving ? "Saving..." : isReceptionist ? "Save Demographics" : "Save Patient"}
             </Button>
           </div>
         </div>
@@ -951,512 +962,6 @@ export default function PatientDetailPage() {
             })}
           </div>
 
-          {/* ── EEU STAFF PROFILE TAB ──────────────────────────────────── */}
-          {activeTab === "eeu" && (
-            <div className="space-y-5">
-              <Card className={cn(
-                "shadow-2xs overflow-hidden border",
-                isEEP ? "border-sky-500/20" : "border-emerald-500/20"
-              )}>
-                <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={cn(
-                      "p-2 rounded-xl",
-                      isEEP
-                        ? "bg-sky-500/10 text-sky-600"
-                        : isContractor
-                        ? "bg-amber-500/10 text-amber-600"
-                        : "bg-emerald-500/10 text-emerald-600"
-                    )}>
-                      <Icon
-                        icon={isEEP ? "solar:bolt-bold-duotone" : isContractor ? "solar:hammer-bold-duotone" : "solar:buildings-bold-duotone"}
-                        size={20}
-                      />
-                    </div>
-                    <div>
-                      <CardTitle className="text-sm font-bold">
-                        {isEEP
-                          ? "Ethiopian Electric Power (EEP) Occupational Record"
-                          : isContractor
-                          ? "Construction / Contractor / Other Occupational Record"
-                          : "Ethiopian Electric Utility (EEU) Occupational Record"}
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        {isEEP
-                          ? "Power generation station, dam project, 400kV transmission hub, and payroll links"
-                          : isContractor
-                          ? "Infrastructure contractor, subcontractor personnel, and occupational health records"
-                          : "Official staff payroll ID, assigned regional station, job cadre, and medical benefits status"}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      type="button"
-                      onClick={() => setShowIdCardModal(true)}
-                      className={cn(
-                        "h-8 text-xs gap-1.5 font-semibold",
-                        isEEP
-                          ? "border-sky-500/30 text-sky-700 dark:text-sky-400 hover:bg-sky-500/10"
-                          : isContractor
-                          ? "border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
-                          : "border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-                      )}
-                    >
-                      <Icon icon="solar:user-id-bold-duotone" size={15} />
-                      Digital ID Badge & QR
-                    </Button>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] font-mono",
-                        isEEP
-                          ? "text-sky-600 border-sky-500/30"
-                          : isContractor
-                          ? "text-amber-600 border-amber-500/30"
-                          : "text-emerald-600 border-emerald-500/30"
-                      )}
-                    >
-                      {isEEP ? "EEP Health Services" : isContractor ? "Contractor Services" : "EEU Health Services"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Corporate Employer</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.company_affiliation || (isEEP ? "Ethiopian Electric Power (EEP)" : isContractor ? "Contractor / Other" : "Ethiopian Electric Utility (EEU)")}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const rawNum = (form.eeu_staff_id || "")
-                            .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-                            .replace(/^(EEU|EEP|others)-/i, "")
-                            .replace(/^EMP-?/i, "");
-                          const prefix = val.includes("EEP")
-                            ? "EEP-"
-                            : (val.includes("Contractor") || val.includes("Other"))
-                            ? "others-"
-                            : "EEU-";
-                          setForm({
-                            ...form,
-                            company_affiliation: val,
-                            eeu_staff_id: rawNum ? `${prefix}${rawNum}` : "",
-                            eeu_department: val.includes("EEP")
-                              ? "Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)"
-                              : (val.includes("Contractor") || val.includes("Other"))
-                              ? "Contractor & Project Infrastructure"
-                              : "Distribution Directorate",
-                          });
-                        }}
-                      >
-                        <option value="Ethiopian Electric Utility (EEU)">Ethiopian Electric Utility (EEU)</option>
-                        <option value="Ethiopian Electric Power (EEP)">Ethiopian Electric Power (EEP)</option>
-                        <option value="Contractor / Other">Construction / Contractor / Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 flex items-center justify-between">
-                        <span>{isEEP ? "EEP Staff / Payroll ID" : isContractor ? "Contractor ID" : "EEU Staff / Payroll ID"}</span>
-                        <span className="text-[10px] text-muted-foreground font-normal">Digits only</span>
-                      </Label>
-                      <div className="flex rounded-lg shadow-2xs">
-                        <span className={cn(
-                          "inline-flex items-center px-3 rounded-l-lg border border-r-0 text-xs font-mono font-bold select-none",
-                          isEEP
-                            ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                            : isContractor
-                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                        )}>
-                          {isEEP ? "EEP-" : isContractor ? "others-" : "EEU-"}
-                        </span>
-                        <Input
-                          className="rounded-l-none h-9 text-xs font-mono font-bold tracking-wider"
-                          value={
-                            (form.eeu_staff_id || "")
-                              .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-                              .replace(/^(EEU|EEP|others)-/i, "")
-                              .replace(/^EMP-?/i, "")
-                          }
-                          onChange={(e) => {
-                            const rawDigits = e.target.value.replace(/[^0-9]/g, "");
-                            const prefix = isEEP ? "EEP-" : isContractor ? "others-" : "EEU-";
-                            setForm({
-                              ...form,
-                              eeu_staff_id: rawDigits ? `${prefix}${rawDigits}` : "",
-                            });
-                          }}
-                          placeholder={isEEP ? "765767" : isContractor ? "578879" : "657854"}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Directorate / Department</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.eeu_department || (isEEP ? "Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)" : "Distribution Directorate")}
-                        onChange={(e) => setForm({ ...form, eeu_department: e.target.value })}
-                      >
-                        {isEEP ? (
-                          <>
-                            <option value="Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)">Generation & Hydro Plants (GERD, Gibe, Tekeze, Fincha)</option>
-                            <option value="High-Voltage Transmission Grid Directorate (400kV / 500kV)">High-Voltage Transmission Grid Directorate (400kV / 500kV)</option>
-                            <option value="Substation Automation, SCADA & Protection Directorate">Substation Automation, SCADA & Protection Directorate</option>
-                            <option value="Dam & Project Operations (GERD / Gibe III / Tekeze)">Dam & Project Operations (GERD / Gibe III / Tekeze)</option>
-                            <option value="Electro-Mechanical Engineering & Maintenance">Electro-Mechanical Engineering & Maintenance</option>
-                            <option value="Wind & Geothermal Projects Directorate">Wind & Geothermal Projects Directorate</option>
-                            <option value="Fleet, Heavy Machinery & Regional Logistics">Fleet, Heavy Machinery & Regional Logistics</option>
-                            <option value="Corporate Human Resources & Administration">Corporate Human Resources & Administration</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Distribution Directorate">Distribution Directorate</option>
-                            <option value="Transmission Grid Directorate">Transmission Grid Directorate</option>
-                            <option value="Generation & Hydro Plants">Generation & Hydro Plants</option>
-                            <option value="Customer Services & Metering">Customer Services & Metering</option>
-                            <option value="Inspection & Energy Loss Directorate">Inspection & Energy Loss Directorate</option>
-                            <option value="Fleet, Logistics & Stores">Fleet, Logistics & Stores</option>
-                            <option value="Human Resources & Administration">Human Resources & Administration</option>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Cadre / Job Role</Label>
-                      <Input
-                        className="h-9 text-xs"
-                        value={form.eeu_cadre || ""}
-                        onChange={(e) => setForm({ ...form, eeu_cadre: e.target.value })}
-                        placeholder={isEEP ? "e.g., Hydro Turbine Engineer" : "e.g., Senior Lineman"}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">EEU Region</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.eeu_region || "Addis Ababa"}
-                        onChange={(e) => setForm({ ...form, eeu_region: e.target.value })}
-                      >
-                        <option value="Addis Ababa">Addis Ababa</option>
-                        <option value="Oromia">Oromia</option>
-                        <option value="Amhara">Amhara</option>
-                        <option value="Sidama">Sidama</option>
-                        <option value="Somali">Somali</option>
-                        <option value="Tigray">Tigray</option>
-                        <option value="Dire Dawa">Dire Dawa</option>
-                        <option value="South West Ethiopia">South West Ethiopia</option>
-                        <option value="Central Ethiopia">Central Ethiopia</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Specific Workstation / Substation</Label>
-                      <Input
-                        className="h-9 text-xs"
-                        value={form.eeu_work_station || ""}
-                        onChange={(e) => setForm({ ...form, eeu_work_station: e.target.value })}
-                        placeholder="e.g. Kality 230kV Substation Bay 4"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Beneficiary Category</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.eeu_beneficiary_type || "Staff"}
-                        onChange={(e) => setForm({ ...form, eeu_beneficiary_type: e.target.value })}
-                      >
-                        <option value="Staff">{isEEP ? "EEP Primary Staff" : isContractor ? "Contractor Primary Personnel" : "EEU Primary Staff"}</option>
-                        <option value="Spouse">Dependent Spouse</option>
-                        <option value="Child">Dependent Child</option>
-                        <option value="Dependent Parent">Dependent Parent</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {form.eeu_beneficiary_type && form.eeu_beneficiary_type !== "Staff" && (
-                    <div className="p-3.5 rounded-xl border border-dashed bg-muted/20 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold text-foreground/80 flex items-center gap-1.5">
-                          <Icon icon="solar:users-group-two-rounded-bold" size={14} className="text-primary" />
-                          <span>Sponsor Staff / Primary Personnel ID</span>
-                        </Label>
-                        <span className="text-[10px] text-muted-foreground font-normal">Digits only</span>
-                      </div>
-                      <div className="flex rounded-lg shadow-2xs max-w-sm">
-                        <span className={cn(
-                          "inline-flex items-center px-3 rounded-l-lg border border-r-0 text-xs font-mono font-bold select-none",
-                          isEEP
-                            ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                            : isContractor
-                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                        )}>
-                          {isEEP ? "EEP-" : isContractor ? "others-" : "EEU-"}
-                        </span>
-                        <Input
-                          className="rounded-l-none h-9 text-xs font-mono font-bold tracking-wider"
-                          value={
-                            (form.eeu_primary_staff_id || "")
-                              .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-                              .replace(/^(EEU|EEP|others)-/i, "")
-                              .replace(/^EMP-?/i, "")
-                          }
-                          onChange={(e) => {
-                            const rawDigits = e.target.value.replace(/[^0-9]/g, "");
-                            const prefix = isEEP ? "EEP-" : isContractor ? "others-" : "EEU-";
-                            setForm({
-                              ...form,
-                              eeu_primary_staff_id: rawDigits ? `${prefix}${rawDigits}` : "",
-                            });
-                          }}
-                          placeholder={isEEP ? "765767" : isContractor ? "578879" : "657854"}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Medical Scheme Status</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.eeu_medical_coverage_status || "Active Coverage"}
-                        onChange={(e) => setForm({ ...form, eeu_medical_coverage_status: e.target.value })}
-                      >
-                        <option value="Active Coverage">Active Coverage</option>
-                        <option value="Special Approval">Special Approval</option>
-                        <option value="Exceeded Ceiling">Exceeded Ceiling</option>
-                        <option value="Suspended">Suspended</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Climbing Fitness Status</Label>
-                      <select
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
-                        value={form.eeu_climbing_fitness_status || "Not Applicable"}
-                        onChange={(e) => setForm({ ...form, eeu_climbing_fitness_status: e.target.value })}
-                      >
-                        <option value="Fit to Climb">Fit to Climb (Certified)</option>
-                        <option value="Restricted Ground Duty">Restricted Ground Duty</option>
-                        <option value="Temporarily Unfit">Temporarily Unfit</option>
-                        <option value="Pending Annual Assessment">Pending Annual Assessment</option>
-                        <option value="Not Applicable">Not Applicable</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border/40 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate("/healthcare/occupational/sick-leave-certificates")}
-                      className="gap-1.5 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-                    >
-                      <Icon icon="solar:document-add-bold" size={14} />
-                      Issue Sick Leave Certificate
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate("/healthcare/occupational/fitness-evaluations")}
-                      className="gap-1.5 text-xs text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10"
-                    >
-                      <Icon icon="solar:medal-ribbons-star-bold" size={14} />
-                      Conduct Climbing Exam
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate("/healthcare/occupational/incidents")}
-                      className="gap-1.5 text-xs text-rose-600 border-rose-500/30 hover:bg-rose-500/10"
-                    >
-                      <Icon icon="solar:danger-triangle-bold" size={14} />
-                      Report Workplace Incident
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* ── EEU MEDICAL BENEFIT UTILIZATION CARD (ETB Quota Tracker) ── */}
-              {(() => {
-                const ceilingEtb = Number(form.eeu_annual_benefit_ceiling_etb ?? patient.eeu_annual_benefit_ceiling_etb ?? 25000);
-                const usedEtb = Number(form.eeu_benefit_used_etb ?? patient.eeu_benefit_used_etb ?? 0);
-                const remainingEtb = Math.max(0, ceilingEtb - usedEtb);
-                const quotaPct = Math.min(100, Math.round((usedEtb / (ceilingEtb || 1)) * 100));
-
-                const barColor =
-                  quotaPct >= 85
-                    ? "bg-rose-500"
-                    : quotaPct >= 60
-                    ? "bg-amber-500"
-                    : "bg-emerald-500";
-
-                return (
-                  <Card className="shadow-2xs overflow-hidden border-primary/30">
-                    <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                          <Icon icon="solar:wallet-money-bold-duotone" size={20} />
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm font-bold">
-                            EEU Annual Medical Benefit Quota & Allowance (ETB)
-                          </CardTitle>
-                          <CardDescription className="text-xs">
-                            Annual healthcare ceiling per employee & dependents pool with cumulative claim tracking
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <Badge
-                        className={
-                          quotaPct >= 85
-                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
-                            : quotaPct >= 60
-                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        }
-                      >
-                        {quotaPct}% Quota Utilized
-                      </Badge>
-                    </CardHeader>
-                    <CardContent className="p-5 space-y-5">
-                      {/* Metric highlights */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                          <div className="text-[11px] font-medium text-muted-foreground">Annual Benefit Ceiling</div>
-                          <div className="mt-1 font-mono text-xl font-bold text-foreground">
-                            ETB {ceilingEtb.toLocaleString()}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">EEU Health Directorate policy</div>
-                        </div>
-
-                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                          <div className="text-[11px] font-medium text-muted-foreground">Accumulated Claims Used</div>
-                          <div className="mt-1 font-mono text-xl font-bold text-foreground">
-                            ETB {usedEtb.toLocaleString()}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">Prescriptions, labs & consultations</div>
-                        </div>
-
-                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                          <div className="text-[11px] font-medium text-muted-foreground">Available Quota Balance</div>
-                          <div className={`mt-1 font-mono text-xl font-bold ${remainingEtb <= 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            ETB {remainingEtb.toLocaleString()}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground">Remaining for current fiscal year</div>
-                        </div>
-                      </div>
-
-                      {/* Visual Progress Bar */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-semibold text-foreground/80">Allowance Depletion Progress</span>
-                          <span className="font-mono text-muted-foreground">
-                            {usedEtb.toLocaleString()} / {ceilingEtb.toLocaleString()} ETB ({quotaPct}%)
-                          </span>
-                        </div>
-                        <div className="h-3 w-full overflow-hidden rounded-full bg-muted/60 p-0.5">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${barColor}`}
-                            style={{ width: `${quotaPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Alert banner if near ceiling */}
-                      {quotaPct >= 85 && (
-                        <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300">
-                          <Icon icon="solar:danger-triangle-bold" size={18} className="shrink-0 mt-0.5" />
-                          <div>
-                            <div className="font-bold">Medical Benefit Warning</div>
-                            <div>
-                              This beneficiary has consumed {quotaPct}% of their annual medical ceiling. Outpatient claims exceeding ETB {ceilingEtb.toLocaleString()} require official Directorate Special Approval.
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Quick Adjust Quota & Log Expense Form */}
-                      <div className="rounded-xl border border-border/70 bg-card p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground">Adjust Quota / Add Expense</span>
-                          <span className="text-[11px] text-muted-foreground">Click "Save Patient" above to persist changes</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <Label className="text-xs font-semibold text-foreground/80 mb-1 block">
-                              Annual Benefit Ceiling (ETB)
-                            </Label>
-                            <div className="flex gap-2">
-                              <Input
-                                type="number"
-                                className="h-9 text-xs font-mono"
-                                value={form.eeu_annual_benefit_ceiling_etb ?? 25000}
-                                onChange={(e) =>
-                                  setForm({ ...form, eeu_annual_benefit_ceiling_etb: Number(e.target.value) })
-                                }
-                              />
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {[25000, 35000, 50000].map((preset) => (
-                                <button
-                                  key={preset}
-                                  type="button"
-                                  onClick={() => setForm({ ...form, eeu_annual_benefit_ceiling_etb: preset })}
-                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border hover:bg-muted"
-                                >
-                                  {preset.toLocaleString()} ETB
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <Label className="text-xs font-semibold text-foreground/80 mb-1 block">
-                              Accumulated Used (ETB)
-                            </Label>
-                            <Input
-                              type="number"
-                              className="h-9 text-xs font-mono"
-                              value={form.eeu_benefit_used_etb ?? 0}
-                              onChange={(e) =>
-                                setForm({ ...form, eeu_benefit_used_etb: Number(e.target.value) })
-                              }
-                            />
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {[250, 500, 1000, 2500].map((inc) => (
-                                <button
-                                  key={inc}
-                                  type="button"
-                                  onClick={() => {
-                                    const current = Number(form.eeu_benefit_used_etb ?? patient.eeu_benefit_used_etb ?? 0);
-                                    setForm({ ...form, eeu_benefit_used_etb: current + inc });
-                                  }}
-                                  className="text-[10px] font-mono px-1.5 py-0.5 rounded border hover:bg-muted text-primary"
-                                >
-                                  +{inc.toLocaleString()} ETB
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })()}
-            </div>
-          )}
 
           {/* ── DETAILS TAB ───────────────────────────────────────────── */}
           {activeTab === "details" && (
@@ -1663,271 +1168,408 @@ export default function PatientDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* Card 2: Financial Account & Customer Classification */}
-              <Card className="shadow-2xs overflow-hidden">
+              {/* Card 2: Corporate Employer & Occupational Affiliation Record */}
+              <Card className={cn(
+                "shadow-2xs overflow-hidden border",
+                isEEFC
+                  ? "border-blue-500/20"
+                  : isRetired
+                    ? "border-purple-500/20"
+                    : isOthers
+                      ? "border-amber-500/20"
+                      : "border-emerald-500/20"
+              )}>
                 <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600">
-                      <Icon icon="solar:wallet-money-bold-duotone" size={20} />
+                    <div className={cn(
+                      "p-2 rounded-xl",
+                      isEEFC
+                        ? "bg-blue-500/10 text-blue-600"
+                        : isRetired
+                          ? "bg-purple-500/10 text-purple-600"
+                          : isOthers
+                            ? "bg-amber-500/10 text-amber-600"
+                            : "bg-emerald-500/10 text-emerald-600"
+                    )}>
+                      <Icon
+                        icon={isEEFC ? "solar:football-bold-duotone" : isRetired ? "solar:user-heart-bold-duotone" : isOthers ? "solar:users-group-two-rounded-bold-duotone" : "solar:buildings-bold-duotone"}
+                        size={20}
+                      />
                     </div>
                     <div>
-                      <CardTitle className="text-sm font-bold">Customer Account & Commercial Billing</CardTitle>
+                      <CardTitle className="text-sm font-bold">
+                        {isEEFC
+                          ? "Ethiopian Electric Football club (EEFC) Record"
+                          : isRetired
+                            ? "Retired Employee Occupational Record"
+                            : isOthers
+                              ? "Others Affiliation Record"
+                              : "Ethiopian Electric Utility (EEU) Occupational Record"}
+                      </CardTitle>
                       <CardDescription className="text-xs">
-                        Patient account synchronization, tariff price lists, commercial billing terms, and insurance coverage.
+                        {isEEFC
+                          ? "Football club athlete, staff member, team coach, and medical eligibility"
+                          : isRetired
+                            ? "Retired enterprise staff member, pension identification, and healthcare coverage"
+                            : isOthers
+                              ? "Affiliated personnel and external partner occupational health records"
+                              : "Official staff payroll ID, assigned regional station, job cadre, and medical benefits status"}
                       </CardDescription>
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    Customer Linkage
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-mono",
+                        isEEFC
+                          ? "text-blue-600 border-blue-500/30"
+                          : isRetired
+                            ? "text-purple-600 border-purple-500/30"
+                            : isOthers
+                              ? "text-amber-600 border-amber-500/30"
+                              : "text-emerald-600 border-emerald-500/30"
+                      )}
+                    >
+                      {isEEFC ? "EEFC Clinic Services" : isRetired ? "Retired Staff Clinic" : isOthers ? "Others Clinic Services" : "EEU Health Services"}
+                    </Badge>
+                  </div>
                 </CardHeader>
-                <CardContent className="p-5">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <CardContent className="p-5 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Customer Group</Label>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Corporate Employer</Label>
+                      <select
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                        value={form.company_affiliation || "Ethiopian Electric Utility (EEU)"}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const rawNum = (form.eeu_staff_id || "")
+                            .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+                            .replace(/^(EEU|EEFC|RET|others)-/i, "")
+                            .replace(/^EMP-?/i, "");
+                          const prefix = (val.includes("EEFC") || val.includes("Football"))
+                            ? "EEFC-"
+                            : val.includes("Retired")
+                              ? "RET-"
+                              : val.includes("Other")
+                                ? "others-"
+                                : "EEU-";
+                          setForm({
+                            ...form,
+                            company_affiliation: val,
+                            eeu_staff_id: rawNum ? `${prefix}${rawNum}` : "",
+                            eeu_department: (val.includes("EEFC") || val.includes("Football"))
+                              ? "Ethiopian Electric Football Club (EEFC)"
+                              : val.includes("Retired")
+                                ? "Pension & Retired Staff Directorate"
+                                : val.includes("Other")
+                                  ? "Other Partner / External Entity"
+                                  : "Distribution Directorate",
+                          });
+                        }}
+                      >
+                        <option value="Ethiopian Electric Utility (EEU)">Ethiopian Electric Utility (EEU)</option>
+                        <option value="Ethiopian Electric Football club (EEFC)">Ethiopian Electric Football club (EEFC)</option>
+                        <option value="Retired Employee">Retired Employee</option>
+                        <option value="Others">Others</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 flex items-center justify-between">
+                        <span>{isEEFC ? "EEFC Athlete / Member ID" : isRetired ? "Pension / Retiree ID" : isOthers ? "Others ID" : "EEU Staff / Payroll ID"}</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Digits only</span>
+                      </Label>
+                      <div className="flex rounded-lg shadow-2xs">
+                        <span className={cn(
+                          "inline-flex items-center px-3 rounded-l-lg border border-r-0 text-xs font-mono font-bold select-none",
+                          isEEFC
+                            ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30"
+                            : isRetired
+                              ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                              : isOthers
+                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                        )}>
+                          {isEEFC ? "EEFC-" : isRetired ? "RET-" : isOthers ? "others-" : "EEU-"}
+                        </span>
+                        <Input
+                          className="rounded-l-none h-9 text-xs font-mono font-bold tracking-wider"
+                          value={
+                            (form.eeu_staff_id || "")
+                              .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+                              .replace(/^(EEU|EEFC|RET|others)-/i, "")
+                              .replace(/^EMP-?/i, "")
+                          }
+                          onChange={(e) => {
+                            const rawDigits = e.target.value.replace(/[^0-9]/g, "");
+                            const prefix = isEEFC ? "EEFC-" : isRetired ? "RET-" : isOthers ? "others-" : "EEU-";
+                            setForm({
+                              ...form,
+                              eeu_staff_id: rawDigits ? `${prefix}${rawDigits}` : "",
+                            });
+                          }}
+                          placeholder={isEEFC ? "10023" : isRetired ? "20412" : isOthers ? "578879" : "657854"}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Directorate / Department</Label>
                       <Input
-                        value={form.customer_group || ""}
-                        onChange={(e) => setForm({ ...form, customer_group: e.target.value })}
-                        placeholder="All Customers / Commercial / Insurance"
                         className="h-9 text-xs"
+                        value={form.eeu_department || ""}
+                        onChange={(e) => setForm({ ...form, eeu_department: e.target.value })}
+                        placeholder={isEEFC ? "e.g., Football Club Senior Team" : isRetired ? "e.g., Pension & Retired Directorate" : isOthers ? "e.g., External Partner Organization" : "e.g., Distribution Directorate"}
                       />
                     </div>
                     <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Sales Territory</Label>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Cadre / Job Role</Label>
                       <Input
-                        value={form.territory || ""}
-                        onChange={(e) => setForm({ ...form, territory: e.target.value })}
-                        placeholder="All Territories / Local Region"
                         className="h-9 text-xs"
+                        value={form.eeu_cadre || ""}
+                        onChange={(e) => setForm({ ...form, eeu_cadre: e.target.value })}
+                        placeholder={isEEFC ? "e.g., Athlete / Football Player" : isRetired ? "e.g., Retired Senior Lineman" : isOthers ? "e.g., External Personnel" : "e.g., Senior Lineman"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">EEU Region</Label>
+                      <select
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                        value={form.eeu_region || "Addis Ababa"}
+                        onChange={(e) => setForm({ ...form, eeu_region: e.target.value })}
+                      >
+                        <option value="Addis Ababa">Addis Ababa</option>
+                        <option value="Oromia">Oromia</option>
+                        <option value="Amhara">Amhara</option>
+                        <option value="Sidama">Sidama</option>
+                        <option value="Somali">Somali</option>
+                        <option value="Tigray">Tigray</option>
+                        <option value="Dire Dawa">Dire Dawa</option>
+                        <option value="South West Ethiopia">South West Ethiopia</option>
+                        <option value="Central Ethiopia">Central Ethiopia</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Specific Workstation / Substation</Label>
+                      <Input
+                        className="h-9 text-xs"
+                        value={form.eeu_work_station || ""}
+                        onChange={(e) => setForm({ ...form, eeu_work_station: e.target.value })}
+                        placeholder="e.g. Kality 230kV Substation Bay 4"
                       />
                     </div>
                     <div>
-                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Default Price List</Label>
-                      <Input
-                        value={form.default_price_list || ""}
-                        onChange={(e) => setForm({ ...form, default_price_list: e.target.value })}
-                        placeholder="Standard Selling / OPD Tariff"
-                        className="h-9 text-xs"
-                      />
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Beneficiary Category</Label>
+                      <select
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                        value={form.eeu_beneficiary_type || "Staff"}
+                        onChange={(e) => setForm({ ...form, eeu_beneficiary_type: e.target.value })}
+                      >
+                        <option value="Staff">{isEEFC ? "EEFC Primary Athlete / Staff" : isRetired ? "Retired Primary Member" : isOthers ? "Primary Personnel" : "EEU Primary Staff"}</option>
+                        <option value="Spouse">Dependent Spouse</option>
+                        <option value="Child">Dependent Child</option>
+                        <option value="Dependent Parent">Dependent Parent</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {form.eeu_beneficiary_type && form.eeu_beneficiary_type !== "Staff" && (
+                    <div className="p-3.5 rounded-xl border border-dashed bg-muted/20 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold text-foreground/80 flex items-center gap-1.5">
+                          <Icon icon="solar:users-group-two-rounded-bold" size={14} className="text-primary" />
+                          <span>Sponsor Staff / Primary Personnel ID</span>
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground font-normal">Digits only</span>
+                      </div>
+                      <div className="flex rounded-lg shadow-2xs max-w-sm">
+                        <span className={cn(
+                          "inline-flex items-center px-3 rounded-l-lg border border-r-0 text-xs font-mono font-bold select-none",
+                          isEEFC
+                            ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30"
+                            : isRetired
+                              ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                              : isOthers
+                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                        )}>
+                          {isEEFC ? "EEFC-" : isRetired ? "RET-" : isOthers ? "others-" : "EEU-"}
+                        </span>
+                        <Input
+                          className="rounded-l-none h-9 text-xs font-mono font-bold tracking-wider"
+                          value={
+                            (form.eeu_primary_staff_id || "")
+                              .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+                              .replace(/^(EEU|EEFC|RET|others)-/i, "")
+                              .replace(/^EMP-?/i, "")
+                          }
+                          onChange={(e) => {
+                            const rawDigits = e.target.value.replace(/[^0-9]/g, "");
+                            const prefix = isEEFC ? "EEFC-" : isRetired ? "RET-" : isOthers ? "others-" : "EEU-";
+                            setForm({
+                              ...form,
+                              eeu_primary_staff_id: rawDigits ? `${prefix}${rawDigits}` : "",
+                            });
+                          }}
+                          placeholder={isEEFC ? "10023" : isRetired ? "20412" : isOthers ? "578879" : "657854"}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Medical Scheme Status</Label>
+                      <select
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                        value={form.eeu_medical_coverage_status || "Active Coverage"}
+                        onChange={(e) => setForm({ ...form, eeu_medical_coverage_status: e.target.value })}
+                      >
+                        <option value="Active Coverage">Active Coverage</option>
+                        <option value="Special Approval">Special Approval</option>
+                        <option value="Exceeded Ceiling">Exceeded Ceiling</option>
+                        <option value="Suspended">Suspended</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground/80 mb-1 block">Climbing Fitness Status</Label>
+                      <select
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-background h-9 focus:ring-2 focus:ring-primary/20 focus:outline-hidden"
+                        value={form.eeu_climbing_fitness_status || "Not Applicable"}
+                        onChange={(e) => setForm({ ...form, eeu_climbing_fitness_status: e.target.value })}
+                      >
+                        <option value="Fit to Climb">Fit to Climb (Certified)</option>
+                        <option value="Restricted Ground Duty">Restricted Ground Duty</option>
+                        <option value="Temporarily Unfit">Temporarily Unfit</option>
+                        <option value="Pending Annual Assessment">Pending Annual Assessment</option>
+                        <option value="Not Applicable">Not Applicable</option>
+                      </select>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Card 3: Clinical Intake Background & General Observations */}
-              <Card className="shadow-2xs overflow-hidden">
-                <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600">
-                      <Icon icon="solar:document-text-bold-duotone" size={20} />
+              {/* Card 3: Clinical Intake Background & General Observations (Clinical Staff Only) */}
+              {!isReceptionist && !isLabTech && (canViewClinical || isDoctor || isAdmin) && (
+                <Card className="shadow-2xs overflow-hidden">
+                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600">
+                        <Icon icon="solar:document-text-bold-duotone" size={20} />
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-bold">Clinical Intake & Context Notes</CardTitle>
+                        <CardDescription className="text-xs">
+                          Baseline intake observations, clinical history summaries, and special care handling directives.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-sm font-bold">Clinical Intake & Context Notes</CardTitle>
-                      <CardDescription className="text-xs">
-                        Baseline intake observations, clinical history summaries, and special care handling directives.
-                      </CardDescription>
-                    </div>
-                  </div>
 
-                  {/* 1-Click Template Chips */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">
-                      Quick Templates:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((p) => ({
-                          ...p,
-                          patient_details:
-                            "Adult patient presents for routine health baseline assessment. Full systemic review unremarkable. No prior adverse reactions or hospitalizations noted.",
-                        }))
-                      }
-                      className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
+                    {/* 1-Click Template Chips */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mr-1">
+                        Quick Templates:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            patient_details:
+                              "Adult patient presents for routine health baseline assessment. Full systemic review unremarkable. No prior adverse reactions or hospitalizations noted.",
+                          }))
+                        }
+                        className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
+                      >
+                        Routine Adult
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            patient_details:
+                              "Chronic care intake. Patient tracked for ongoing outpatient maintenance. Baseline functional status independent. Regular laboratory surveillance indicated.",
+                          }))
+                        }
+                        className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
+                      >
+                        Chronic Tracking
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            patient_details:
+                              "Pediatric intake. Developmental milestones on track. Immunization card verified up to date. Accompanied by parent/legal guardian.",
+                          }))
+                        }
+                        className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
+                      >
+                        Pediatric Baseline
+                      </button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <textarea
+                      rows={4}
+                      className="w-full p-3 rounded-xl border bg-background text-xs text-foreground placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none resize-y min-h-[100px]"
+                      value={(form as any).patient_details || ""}
+                      onChange={(e) => setForm({ ...form, patient_details: e.target.value } as any)}
+                      placeholder="Enter any additional background information, clinical observations, or special care directives regarding this patient..."
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Administrative Receptionist Action Card */}
+              {isReceptionist && (
+                <Card className="shadow-2xs border-blue-500/20 bg-blue-500/5 overflow-hidden">
+                  <CardHeader className="pb-3 border-b bg-blue-500/10 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-blue-500/15 text-blue-600">
+                        <Icon icon="solar:calendar-bold-duotone" size={20} />
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm font-bold text-foreground">Receptionist Appointment & Scheduling Queue</CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          Coordinate practitioner appointments and check-in workflows for this patient.
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 flex flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/healthcare/appointments/new?patient=${patient.id}`)}
+                      className="text-xs gap-2 border-blue-500/30 text-blue-700 hover:bg-blue-500/10"
                     >
-                      Routine Adult
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((p) => ({
-                          ...p,
-                          patient_details:
-                            "Chronic care intake. Patient tracked for ongoing outpatient maintenance. Baseline functional status independent. Regular laboratory surveillance indicated.",
-                        }))
-                      }
-                      className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
+                      <Icon icon="solar:calendar-add-bold" size={14} />
+                      Book Scheduled Appointment
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/healthcare/appointments?patient=${patient.id}`)}
+                      className="text-xs gap-2 border-border"
                     >
-                      Chronic Tracking
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((p) => ({
-                          ...p,
-                          patient_details:
-                            "Pediatric intake. Developmental milestones on track. Immunization card verified up to date. Accompanied by parent/legal guardian.",
-                        }))
-                      }
-                      className="px-2 py-1 rounded-md bg-muted hover:bg-primary/10 hover:text-primary transition-colors text-[11px] font-medium"
-                    >
-                      Pediatric Baseline
-                    </button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <textarea
-                    rows={4}
-                    className="w-full p-3 rounded-xl border bg-background text-xs text-foreground placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary focus:outline-none resize-y min-h-[100px]"
-                    value={(form as any).patient_details || ""}
-                    onChange={(e) => setForm({ ...form, patient_details: e.target.value } as any)}
-                    placeholder="Enter any additional background information, clinical observations, or special care directives regarding this patient..."
-                  />
-                </CardContent>
-              </Card>
+                      <Icon icon="solar:clock-circle-bold" size={14} />
+                      View Appointments ({txCounts.appointments})
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
           {/* ── DASHBOARD TAB ─────────────────────────────────────────── */}
           {activeTab === "dashboard" && (
             <div className="space-y-6">
-              {/* Active Inpatient Banner (Marley Parity) */}
-              {(() => {
-                const activeRecord = patientInpatients.find((r) =>
-                  ["Admission Scheduled", "Admitted", "Discharge Scheduled"].includes(r.status)
-                );
-                if (!activeRecord) return null;
-                return (
-                  <ActiveInpatientBanner
-                    record={activeRecord}
-                    patientId={patient.id}
-                    patientName={patient.patient_name}
-                    onRefresh={loadPatient}
-                    onViewAll={() => setShowInpatientRecordsModal(true)}
-                  />
-                );
-              })()}
-
-              {/* ── Executive Clinical KPI Scorecards ────────────────────────── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {/* Encounters */}
-                <div
-                  onClick={() => navigate(`/healthcare/encounters?patient=${id}`)}
-                  className="p-3.5 rounded-xl border bg-card hover:border-emerald-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Encounters
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:clipboard-text-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">{txCounts.encounters}</span>
-                    <span className="text-[10px] text-muted-foreground">visits</span>
-                  </div>
-                </div>
-
-                {/* Appointments */}
-                <div
-                  onClick={() => navigate(`/healthcare/appointments?patient=${id}`)}
-                  className="p-3.5 rounded-xl border bg-card hover:border-blue-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Appts
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:calendar-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">{txCounts.appointments}</span>
-                    <span className="text-[10px] text-muted-foreground">booked</span>
-                  </div>
-                </div>
-
-                {/* Vitals */}
-                <div
-                  onClick={() => navigate(`/healthcare/vital-signs?patient=${id}`)}
-                  className="p-3.5 rounded-xl border bg-card hover:border-rose-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Vitals
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:heart-pulse-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">{txCounts.vitals}</span>
-                    <span className="text-[10px] text-muted-foreground">logs</span>
-                  </div>
-                </div>
-
-                {/* Medications */}
-                <div
-                  onClick={() => navigate(`/healthcare/pharmacy/medication-requests?patient=${id}`)}
-                  className="p-3.5 rounded-xl border bg-card hover:border-purple-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Med Orders
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:pills-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">
-                      {txCounts.medicationRequests + txCounts.prescriptions}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">Rx</span>
-                  </div>
-                </div>
-
-                {/* Labs & Diagnostics */}
-                <div
-                  onClick={() => setActiveTab("diagnostics")}
-                  className="p-3.5 rounded-xl border bg-card hover:border-cyan-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Diagnostics
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:flask-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">
-                      {txCounts.labTests + txCounts.serviceRequests}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">tests</span>
-                  </div>
-                </div>
-
-                {/* Inpatient Stays */}
-                <div
-                  onClick={() => setShowInpatientRecordsModal(true)}
-                  className="p-3.5 rounded-xl border bg-card hover:border-indigo-500/50 hover:shadow-2xs transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Inpatient
-                    </span>
-                    <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 group-hover:scale-110 transition-transform">
-                      <Icon icon="solar:hospital-bold-duotone" size={16} />
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-black text-foreground">{txCounts.inpatient}</span>
-                    <span className="text-[10px] text-muted-foreground">stays</span>
-                  </div>
-                </div>
-              </div>
 
               {/* Activity Heatmap (Marley 7-day vertical × 52-week horizontal calendar) */}
               <ActivityHeatmap
@@ -1937,20 +1579,9 @@ export default function PatientDetailPage() {
               />
 
               {/* ── Interactive Clinical Action Center ─────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* 1. Consultations & Outpatient Visits */}
                 <Card className="shadow-2xs overflow-hidden">
-                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600">
-                        <Icon icon="solar:stethoscope-bold-duotone" size={18} />
-                      </div>
-                      <CardTitle className="text-xs font-bold">Consultations & Outpatient Care</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">
-                      {txCounts.encounters + txCounts.appointments} Records
-                    </Badge>
-                  </CardHeader>
                   <CardContent className="p-3.5 space-y-2">
                     {/* Patient Appointment */}
                     <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-blue-400 transition-colors">
@@ -2025,41 +1656,7 @@ export default function PatientDetailPage() {
 
                 {/* 2. Diagnostics & Pathology */}
                 <Card className="shadow-2xs overflow-hidden">
-                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-600">
-                        <Icon icon="solar:flask-bold-duotone" size={18} />
-                      </div>
-                      <CardTitle className="text-xs font-bold">Diagnostic Investigations & Pathology</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">
-                      {txCounts.serviceRequests + txCounts.labTests} Tests
-                    </Badge>
-                  </CardHeader>
                   <CardContent className="p-3.5 space-y-2">
-                    {/* Service Request */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-indigo-400 transition-colors">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                        onClick={() => navigate(`/healthcare/service-requests?patient=${id}`)}
-                      >
-                        <Icon icon="solar:clipboard-check-bold-duotone" size={16} className="text-indigo-600" />
-                        <div>
-                          <div className="text-xs font-semibold text-foreground">Service Requests (Orders)</div>
-                          <div className="text-[10px] text-muted-foreground">{txCounts.serviceRequests} Diagnostic requisitions</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate(`/healthcare/service-requests/new?patient=${id}`)}
-                        className="h-7 text-[11px] gap-1 px-2 border-indigo-500/30 text-indigo-600 hover:bg-indigo-500/10"
-                      >
-                        <Icon icon="solar:add-circle-bold" size={12} />
-                        Order
-                      </Button>
-                    </div>
-
                     {/* Lab Test */}
                     <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-purple-400 transition-colors">
                       <div
@@ -2082,115 +1679,19 @@ export default function PatientDetailPage() {
                         Create
                       </Button>
                     </div>
-
-                    {/* Sample Collection */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-cyan-400 transition-colors">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                        onClick={() => navigate(`/healthcare/sample-collections?patient=${id}`)}
-                      >
-                        <Icon icon="solar:test-tube-add-bold" size={16} className="text-cyan-500" />
-                        <div>
-                          <div className="text-xs font-semibold text-foreground">Sample Collections</div>
-                          <div className="text-[10px] text-muted-foreground">{txCounts.sampleCollections} Phlebotomy specimens</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate(`/healthcare/sample-collections/new?patient=${id}`)}
-                        className="h-7 text-[11px] gap-1 px-2 border-cyan-500/30 text-cyan-600 hover:bg-cyan-500/10"
-                      >
-                        <Icon icon="solar:add-circle-bold" size={12} />
-                        Collect
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
 
-                {/* 3. Rehab & Physiotherapy */}
+                {/* 3. Pharmacy & Prescriptions */}
                 <Card className="shadow-2xs overflow-hidden">
-                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-600">
-                        <Icon icon="solar:meditation-bold-duotone" size={18} />
-                      </div>
-                      <CardTitle className="text-xs font-bold">Rehabilitation & Therapy</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">
-                      {txCounts.therapyPlans + txCounts.therapySessions} Sessions
-                    </Badge>
-                  </CardHeader>
-                  <CardContent className="p-3.5 space-y-2">
-                    {/* Therapy Plan */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-teal-400 transition-colors">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                        onClick={() => navigate(`/healthcare/therapy?patient=${id}`)}
-                      >
-                        <Icon icon="solar:meditation-bold-duotone" size={16} className="text-teal-600" />
-                        <div>
-                          <div className="text-xs font-semibold text-foreground">Therapy Plans</div>
-                          <div className="text-[10px] text-muted-foreground">{txCounts.therapyPlans} Rehabilitation protocols</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setNewTherapyPlanModalOpen(true)}
-                        className="h-7 text-[11px] gap-1 px-2 border-teal-500/30 text-teal-600 hover:bg-teal-500/10"
-                      >
-                        <Icon icon="solar:add-circle-bold" size={12} />
-                        New Plan
-                      </Button>
-                    </div>
-
-                    {/* Therapy Session */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-teal-400 transition-colors">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                        onClick={() => navigate(`/healthcare/therapy?patient=${id}&tab=sessions`)}
-                      >
-                        <Icon icon="solar:stopwatch-bold-duotone" size={16} className="text-teal-600" />
-                        <div>
-                          <div className="text-xs font-semibold text-foreground">Therapy Sessions</div>
-                          <div className="text-[10px] text-muted-foreground">{txCounts.therapySessions} Logged sessions</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setNewTherapySessionModalOpen(true)}
-                        className="h-7 text-[11px] gap-1 px-2 border-teal-500/30 text-teal-600 hover:bg-teal-500/10"
-                      >
-                        <Icon icon="solar:add-circle-bold" size={12} />
-                        Log Session
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* 4. Pharmacy & Inpatient Wards */}
-                <Card className="shadow-2xs overflow-hidden">
-                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600">
-                        <Icon icon="solar:hospital-bold-duotone" size={18} />
-                      </div>
-                      <CardTitle className="text-xs font-bold">Pharmacy & Hospitalization</CardTitle>
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">
-                      {txCounts.medicationRequests + txCounts.inpatient} Active
-                    </Badge>
-                  </CardHeader>
                   <CardContent className="p-3.5 space-y-2">
                     {/* Medication Request */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-rose-400 transition-colors">
+                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-emerald-400 transition-colors">
                       <div
                         className="flex items-center gap-2 cursor-pointer flex-1"
                         onClick={() => navigate(`/healthcare/pharmacy/medication-requests?patient=${id}`)}
                       >
-                        <Icon icon="solar:pills-bold-duotone" size={16} className="text-rose-500" />
+                        <Icon icon="solar:pills-bold-duotone" size={16} className="text-emerald-500" />
                         <div>
                           <div className="text-xs font-semibold text-foreground">Medication Requests (Rx)</div>
                           <div className="text-[10px] text-muted-foreground">{txCounts.medicationRequests} Pharmacy orders</div>
@@ -2200,33 +1701,10 @@ export default function PatientDetailPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => navigate(`/healthcare/pharmacy/medication-requests/new?patient=${id}`)}
-                        className="h-7 text-[11px] gap-1 px-2 border-rose-500/30 text-rose-600 hover:bg-rose-500/10"
+                        className="h-7 text-[11px] gap-1 px-2 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                       >
                         <Icon icon="solar:add-circle-bold" size={12} />
                         Prescribe
-                      </Button>
-                    </div>
-
-                    {/* Inpatient Admission */}
-                    <div className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-indigo-400 transition-colors">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                        onClick={() => setShowInpatientRecordsModal(true)}
-                      >
-                        <Icon icon="solar:hospital-bold-duotone" size={16} className="text-indigo-600" />
-                        <div>
-                          <div className="text-xs font-semibold text-foreground">Inpatient Admissions & Beds</div>
-                          <div className="text-[10px] text-muted-foreground">{txCounts.inpatient} Ward records</div>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowAdmissionModal(true)}
-                        className="h-7 text-[11px] gap-1 px-2 border-indigo-500/30 text-indigo-600 hover:bg-indigo-500/10"
-                      >
-                        <Icon icon="solar:add-circle-bold" size={12} />
-                        Admit
                       </Button>
                     </div>
                   </CardContent>
@@ -2238,584 +1716,9 @@ export default function PatientDetailPage() {
           {/* ── LAB & DIAGNOSTICS TAB ─────────────────────────────────── */}
           {activeTab === "diagnostics" && (
             <div className="space-y-5">
-              {/* ── Diagnostics KPI Summary Bar ─────────────────────────────── */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-xl border bg-card shadow-2xs">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Total Diagnostic Orders</span>
-                    <Icon icon="solar:test-tube-bold-duotone" size={16} className="text-primary" />
-                  </div>
-                  <div className="mt-1.5 text-xl font-black text-foreground">
-                    {patientServiceRequests.length + patientLabs.length}
-                  </div>
-                </div>
 
-                <div className="p-3 rounded-xl border bg-card shadow-2xs">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Service Requests</span>
-                    <Icon icon="solar:clipboard-check-bold-duotone" size={16} className="text-indigo-600" />
-                  </div>
-                  <div className="mt-1.5 text-xl font-black text-foreground">
-                    {patientServiceRequests.length}
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl border bg-card shadow-2xs">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Laboratory Tests</span>
-                    <Icon icon="solar:flask-bold-duotone" size={16} className="text-cyan-600" />
-                  </div>
-                  <div className="mt-1.5 text-xl font-black text-foreground">
-                    {patientLabs.length}
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl border bg-card shadow-2xs">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Verified Results</span>
-                    <Icon icon="solar:check-circle-bold-duotone" size={16} className="text-emerald-600" />
-                  </div>
-                  <div className="mt-1.5 text-xl font-black text-emerald-600">
-                    {patientLabs.filter((l) => l.status === "Approved" || l.status === "Completed").length}
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Search & Filter Command Bar ─────────────────────────────── */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl border bg-card shadow-2xs">
-                {/* Search Input */}
-                <div className="relative flex-1">
-                  <Icon
-                    icon="solar:magnifer-linear"
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  />
-                  <Input
-                    type="text"
-                    value={diagnosticsSearchQuery}
-                    onChange={(e) => setDiagnosticsSearchQuery(e.target.value)}
-                    placeholder="Search diagnostic orders, test names, specimen IDs, or practitioners..."
-                    className="h-8.5 pl-9 text-xs"
-                  />
-                  {diagnosticsSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setDiagnosticsSearchQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-
-                {/* Filter Chips */}
-                <div className="flex items-center gap-1 overflow-x-auto text-xs shrink-0">
-                  {(
-                    [
-                      { key: "all", label: "All Orders" },
-                      { key: "services", label: "Service Requests" },
-                      { key: "labs", label: "Lab Tests" },
-                      { key: "pending", label: "Pending" },
-                      { key: "completed", label: "Completed" },
-                    ] as const
-                  ).map((f) => (
-                    <button
-                      key={f.key}
-                      type="button"
-                      onClick={() => setDiagnosticsFilter(f.key)}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer",
-                        diagnosticsFilter === f.key
-                          ? "bg-primary text-primary-foreground shadow-2xs"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      )}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Quick Add Buttons */}
-                <div className="flex items-center gap-1.5 shrink-0 justify-end">
-                  <Button
-                    size="sm"
-                    onClick={() => navigate(`/healthcare/service-requests/new?patient=${patient.id}`)}
-                    className="h-8 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
-                  >
-                    <Icon icon="solar:add-circle-bold" size={14} />
-                    New Request
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => navigate(`/healthcare/lab-tests/new?patient=${patient.id}`)}
-                    className="h-8 text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                  >
-                    <Icon icon="solar:flask-bold" size={14} />
-                    Create Lab Test
-                  </Button>
-                </div>
-              </div>
-
-              {/* ── Section 1: Service Requests (Marley EHR Parity) ─────────── */}
-              {(diagnosticsFilter === "all" || diagnosticsFilter === "services" || diagnosticsFilter === "pending") && (() => {
-                const totalCount = patientServiceRequests.length;
-                const activeCount = patientServiceRequests.filter((r) => r.status === "Active").length;
-                const completedCount = patientServiceRequests.filter((r) => r.status === "Completed").length;
-                const statCount = patientServiceRequests.filter((r) => r.priority === "STAT" || r.priority === "Urgent").length;
-                const onHoldCount = patientServiceRequests.filter((r) => r.status === "On Hold").length;
-
-                const filteredSRs = patientServiceRequests
-                  .filter((sr) => {
-                    if (srStatusFilter === "active") return sr.status === "Active";
-                    if (srStatusFilter === "urgent") return sr.priority === "STAT" || sr.priority === "Urgent";
-                    if (srStatusFilter === "hold") return sr.status === "On Hold";
-                    if (srStatusFilter === "completed") return sr.status === "Completed";
-                    if (diagnosticsFilter === "pending") return sr.status !== "Completed" && sr.status !== "Cancelled";
-                    return true;
-                  })
-                  .filter((sr) => {
-                    if (srCategoryFilter === "all") return true;
-                    const cat = (sr.category_name || sr.reference_doctype || sr.template_dt || "").toLowerCase();
-                    return cat.includes(srCategoryFilter.toLowerCase());
-                  })
-                  .filter((sr) => {
-                    const q = (srSearchQuery || diagnosticsSearchQuery).toLowerCase().trim();
-                    if (!q) return true;
-                    return (
-                      (sr.title || "").toLowerCase().includes(q) ||
-                      (sr.order_description || "").toLowerCase().includes(q) ||
-                      (sr.category_name || "").toLowerCase().includes(q) ||
-                      (sr.practitioner_name || "").toLowerCase().includes(q) ||
-                      (sr.request_id || "").toLowerCase().includes(q) ||
-                      (sr.notes || "").toLowerCase().includes(q) ||
-                      (sr.status || "").toLowerCase().includes(q)
-                    );
-                  });
-
-                const todayISO = new Date().toISOString().slice(0, 10);
-
-                return (
-                  <Card className="shadow-2xs overflow-hidden border-border/80">
-                    <CardHeader className="pb-3 border-b bg-muted/15 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 shrink-0">
-                          <Icon icon="solar:clipboard-check-bold-duotone" size={20} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <CardTitle className="text-sm font-bold text-foreground">
-                              Service Requests & Clinical Orders
-                            </CardTitle>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                              Marley EHR Parity
-                            </span>
-                          </div>
-                          <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                            Physician diagnostic requisitions, lab orders, radiology imaging scans, procedures & therapy orders.
-                          </CardDescription>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* KPI mini-tags */}
-                        <div className="hidden lg:flex items-center gap-1.5 text-[11px] font-semibold">
-                          <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                            {activeCount} Active
-                          </span>
-                          {statCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping inline-block" />
-                              {statCount} STAT
-                            </span>
-                          )}
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            {completedCount} Done
-                          </span>
-                        </div>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/healthcare/service-requests?patient=${id}`)}
-                          className="h-8 text-xs font-semibold text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 px-2.5"
-                        >
-                          <Icon icon="solar:tuning-bold" size={13} className="mr-1" />
-                          All Requests (Page)
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/healthcare/service-requests/new?patient=${id}`)}
-                          className="h-8 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs px-3"
-                        >
-                          <Icon icon="solar:add-circle-bold" size={14} className="mr-1" />
-                          + New Service Request
-                        </Button>
-                      </div>
-                    </CardHeader>
-
-                    {/* Sub-Filters & Quick Search Strip */}
-                    <div className="px-4 py-2.5 border-b bg-muted/5 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-                        {[
-                          { key: "all", label: `All (${totalCount})` },
-                          { key: "active", label: `Active (${activeCount})` },
-                          { key: "urgent", label: `STAT / Urgent (${statCount})` },
-                          { key: "hold", label: `On Hold (${onHoldCount})` },
-                          { key: "completed", label: `Completed (${completedCount})` },
-                        ].map((st) => (
-                          <button
-                            key={st.key}
-                            type="button"
-                            onClick={() => setSrStatusFilter(st.key)}
-                            className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all shrink-0 ${
-                              srStatusFilter === st.key
-                                ? "bg-indigo-600 text-white shadow-2xs"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
-                            }`}
-                          >
-                            {st.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        <select
-                          className="text-xs h-7 px-2 rounded-md border border-input bg-background shadow-2xs font-medium"
-                          value={srCategoryFilter}
-                          onChange={(e) => setSrCategoryFilter(e.target.value)}
-                        >
-                          <option value="all">All Categories</option>
-                          <option value="lab">Laboratory</option>
-                          <option value="radiology">Radiology & Scans</option>
-                          <option value="procedure">Procedures</option>
-                          <option value="therapy">Therapy</option>
-                          <option value="consultation">Consultations</option>
-                        </select>
-
-                        <div className="w-full sm:w-48">
-                          <Input
-                            placeholder="Filter orders..."
-                            value={srSearchQuery}
-                            onChange={(e) => setSrSearchQuery(e.target.value)}
-                            className="text-xs h-7"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <CardContent className="p-0">
-                      {filteredSRs.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground p-6">
-                          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-500 flex items-center justify-center mx-auto mb-2 border border-indigo-200 dark:border-indigo-800">
-                            <Icon icon="solar:clipboard-check-linear" size={26} />
-                          </div>
-                          <p className="text-xs font-bold text-foreground">No service requests match the filter</p>
-                          <p className="text-[11px] text-muted-foreground max-w-sm mx-auto mt-0.5">
-                            {srStatusFilter !== "all" || srCategoryFilter !== "all" || srSearchQuery
-                              ? "Try resetting the sub-filters or search term to see other orders."
-                              : "No clinical orders recorded for this patient yet."}
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate(`/healthcare/service-requests/new?patient=${id}`)}
-                            className="mt-3 text-xs font-semibold text-indigo-600 border-indigo-200"
-                          >
-                            <Icon icon="solar:add-circle-bold" size={13} className="mr-1" />
-                            Create First Service Request
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead className="bg-muted/40 border-b text-[10px] uppercase font-bold text-muted-foreground">
-                              <tr>
-                                <th className="py-2.5 px-4 text-left">Service / Clinical Order</th>
-                                <th className="py-2.5 px-3 text-left">Category</th>
-                                <th className="py-2.5 px-3 text-left">Priority</th>
-                                <th className="py-2.5 px-3 text-left">Ordered Date</th>
-                                <th className="py-2.5 px-3 text-left">Expected By</th>
-                                <th className="py-2.5 px-3 text-left">Practitioner</th>
-                                <th className="py-2.5 px-3 text-left">Status</th>
-                                <th className="py-2.5 px-4 text-right">Marley Clinical Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                              {filteredSRs.map((sr) => {
-                                const isUrgent = sr.priority === "STAT" || sr.priority === "Urgent";
-                                const isStat = sr.priority === "STAT";
-                                const isOverdue = sr.expected_date && sr.expected_date < todayISO && sr.status === "Active";
-
-                                const isLab = (sr.reference_doctype === "Lab Test Template" || sr.template_dt === "Lab Test Template" || (sr.category_name || "").toLowerCase().includes("lab"));
-                                const isProcedure = (sr.reference_doctype === "Clinical Procedure Template" || sr.template_dt === "Clinical Procedure Template" || (sr.category_name || "").toLowerCase().includes("procedure"));
-                                const isTherapy = (sr.reference_doctype === "Therapy Type" || sr.template_dt === "Therapy Type" || (sr.category_name || "").toLowerCase().includes("therapy"));
-                                const hasSampleReq = sr.notes?.includes("[Sample Required]") || isLab;
-                                const isActionLoading = srActionLoadingId === sr.id;
-
-                                return (
-                                  <tr key={sr.id} className={cn("hover:bg-muted/20 transition-colors", isUrgent && "bg-amber-500/5")}>
-                                    {/* Service Requisition Title & Tags */}
-                                    <td className="py-2.5 px-4">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span
-                                          onClick={() => navigate(`/healthcare/service-requests/${sr.id}`)}
-                                          className="font-bold text-foreground hover:text-indigo-600 hover:underline cursor-pointer"
-                                        >
-                                          {sr.title || sr.order_description || sr.template_dt || sr.request_id || `Order #${sr.id}`}
-                                        </span>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(sr.request_id || String(sr.id));
-                                            toast.success(`Copied ID: ${sr.request_id || sr.id}`);
-                                          }}
-                                          className="font-mono text-[10px] text-muted-foreground hover:text-foreground font-semibold px-1 py-0.2 rounded bg-muted/60"
-                                          title="Click to copy ID"
-                                        >
-                                          {sr.request_id || `HLC-SR-${sr.id}`}
-                                        </button>
-
-                                        {sr.reference_doctype && (
-                                          <Badge variant="outline" className="text-[9px] font-mono py-0 text-muted-foreground">
-                                            {sr.reference_doctype}
-                                          </Badge>
-                                        )}
-
-                                        {hasSampleReq && (
-                                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                            <Icon icon="solar:test-tube-bold" size={9} />
-                                            Sample Req
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {sr.notes && (
-                                        <div className="text-[11px] text-muted-foreground truncate max-w-sm mt-0.5" title={sr.notes}>
-                                          {sr.notes}
-                                        </div>
-                                      )}
-                                    </td>
-
-                                    {/* Category */}
-                                    <td className="py-2.5 px-3">
-                                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-muted text-foreground font-medium">
-                                        {sr.category_name || "General"}
-                                      </span>
-                                    </td>
-
-                                    {/* Priority */}
-                                    <td className="py-2.5 px-3">
-                                      <span
-                                        className={cn(
-                                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                          isStat
-                                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 animate-pulse"
-                                            : sr.priority === "Urgent"
-                                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                                            : sr.priority === "ASAP"
-                                            ? "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30"
-                                            : "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
-                                        )}
-                                      >
-                                        <Icon
-                                          icon={
-                                            isStat
-                                              ? "solar:danger-triangle-bold"
-                                              : sr.priority === "Urgent"
-                                              ? "solar:bell-bold"
-                                              : sr.priority === "ASAP"
-                                              ? "solar:clock-circle-bold"
-                                              : "solar:calendar-bold"
-                                          }
-                                          size={11}
-                                        />
-                                        {sr.priority || "Routine"}
-                                      </span>
-                                    </td>
-
-                                    {/* Ordered Date */}
-                                    <td className="py-2.5 px-3 text-muted-foreground text-[11px]">
-                                      {sr.order_date ? sr.order_date.slice(0, 10) : "—"}
-                                    </td>
-
-                                    {/* Expected Date & Overdue flag */}
-                                    <td className="py-2.5 px-3">
-                                      <div className="flex items-center gap-1.5 text-[11px]">
-                                        <span className={isOverdue ? "text-rose-600 font-bold" : "text-muted-foreground"}>
-                                          {sr.expected_date ? sr.expected_date.slice(0, 10) : "—"}
-                                        </span>
-                                        {isOverdue && (
-                                          <Badge className="bg-rose-600 text-white text-[9px] px-1 py-0">
-                                            Overdue
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </td>
-
-                                    {/* Practitioner */}
-                                    <td className="py-2.5 px-3 text-muted-foreground text-[11px]">
-                                      {sr.practitioner_name ? `Dr. ${sr.practitioner_name}` : "—"}
-                                    </td>
-
-                                    {/* Status Badge */}
-                                    <td className="py-2.5 px-3">
-                                      <Badge
-                                        variant="outline"
-                                        className={cn(
-                                          "text-[10px] font-bold",
-                                          sr.status === "Completed"
-                                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                                            : sr.status === "Cancelled"
-                                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
-                                            : sr.status === "On Hold"
-                                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                                            : "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30"
-                                        )}
-                                      >
-                                        {sr.status}
-                                      </Badge>
-                                    </td>
-
-                                    {/* Actions & Downstream Creator */}
-                                    <td className="py-2.5 px-4 text-right">
-                                      <div className="flex items-center justify-end gap-1.5">
-                                        {/* Downstream Document Button */}
-                                        {isLab && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleLaunchDownstream(sr, "lab")}
-                                            className="h-6 text-[11px] px-2 border-purple-300 text-purple-700 dark:border-purple-800 dark:text-purple-300 hover:bg-purple-50 font-semibold"
-                                            title="Create Lab Test directly linked to this Service Request"
-                                          >
-                                            <Icon icon="solar:flask-bold" size={11} className="mr-1" />
-                                            Lab Test
-                                          </Button>
-                                        )}
-
-                                        {isProcedure && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleLaunchDownstream(sr, "procedure")}
-                                            className="h-6 text-[11px] px-2 border-blue-300 text-blue-700 dark:border-blue-800 dark:text-blue-300 hover:bg-blue-50 font-semibold"
-                                            title="Create Clinical Procedure linked to this Service Request"
-                                          >
-                                            <Icon icon="solar:scalpel-bold" size={11} className="mr-1" />
-                                            Procedure
-                                          </Button>
-                                        )}
-
-                                        {isTherapy && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleLaunchDownstream(sr, "therapy")}
-                                            className="h-6 text-[11px] px-2 border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 font-semibold"
-                                            title="Create Therapy Session linked to this Service Request"
-                                          >
-                                            <Icon icon="solar:dumbbell-small-bold" size={11} className="mr-1" />
-                                            Therapy
-                                          </Button>
-                                        )}
-
-                                        {hasSampleReq && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleLaunchDownstream(sr, "sample")}
-                                            className="h-6 text-[11px] px-2 border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300 hover:bg-amber-50 font-semibold"
-                                            title="Collect specimen for this Service Request"
-                                          >
-                                            <Icon icon="solar:test-tube-bold" size={11} className="mr-1" />
-                                            Sample
-                                          </Button>
-                                        )}
-
-                                        {/* State Transitions */}
-                                        {(sr.status === "Active" || sr.status === "Draft") && (
-                                          <>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              disabled={isActionLoading}
-                                              onClick={() => handleCompleteServiceRequest(sr)}
-                                              className="h-6 text-[11px] px-2 border-emerald-300 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 font-semibold"
-                                              title="Fulfill / Complete this Service Request"
-                                            >
-                                              <Icon icon="solar:check-circle-bold" size={12} className="mr-0.5 text-emerald-600" />
-                                              Fulfill
-                                            </Button>
-
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              disabled={isActionLoading}
-                                              onClick={() => handleToggleHoldServiceRequest(sr)}
-                                              className="h-6 text-[11px] px-1.5 text-amber-700 hover:bg-amber-50"
-                                              title="Put on hold"
-                                            >
-                                              <Icon icon="solar:pause-circle-bold" size={12} />
-                                            </Button>
-                                          </>
-                                        )}
-
-                                        {sr.status === "On Hold" && (
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isActionLoading}
-                                            onClick={() => handleToggleHoldServiceRequest(sr)}
-                                            className="h-6 text-[11px] px-2 border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold"
-                                            title="Resume active request"
-                                          >
-                                            <Icon icon="solar:play-circle-bold" size={12} className="mr-0.5 text-blue-600" />
-                                            Resume
-                                          </Button>
-                                        )}
-
-                                        {(sr.status === "Active" || sr.status === "Draft" || sr.status === "On Hold") && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={isActionLoading}
-                                            onClick={() => handleCancelServiceRequest(sr)}
-                                            className="h-6 text-[11px] px-1 text-rose-600 hover:bg-rose-50"
-                                            title="Cancel request"
-                                          >
-                                            <Icon icon="solar:close-circle-bold" size={12} />
-                                          </Button>
-                                        )}
-
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => navigate(`/healthcare/service-requests/${sr.id}`)}
-                                          className="h-6 text-[11px] px-2 text-indigo-600 hover:bg-indigo-50"
-                                          title="View complete clinical order record"
-                                        >
-                                          Details
-                                        </Button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })()}
-
-              {/* ── Section 2: Laboratory Tests ─────────────────────────────── */}
-              {(diagnosticsFilter === "all" || diagnosticsFilter === "labs" || diagnosticsFilter === "pending" || diagnosticsFilter === "completed") && (
-                <Card className="shadow-2xs overflow-hidden">
+              {/* ── Laboratory Tests ───────────────────────────────────────── */}
+              <Card className="shadow-2xs overflow-hidden">
                   <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-600">
@@ -2931,7 +1834,6 @@ export default function PatientDetailPage() {
                     )}
                   </CardContent>
                 </Card>
-              )}
             </div>
           )}
 
@@ -3718,86 +2620,7 @@ export default function PatientDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* 4. Consultation Fee Validity Tracker */}
-              {feeValidities.length > 0 && (
-                <Card className="shadow-2xs overflow-hidden">
-                  <CardHeader className="pb-3 border-b bg-muted/15 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600">
-                        <Icon icon="solar:bill-check-bold-duotone" size={20} />
-                      </div>
-                      <div>
-                        <CardTitle className="text-xs font-bold">Consultation Fee Validity & Follow-Up Coverage</CardTitle>
-                        <CardDescription className="text-xs">
-                          Active practitioner consultation grace periods and visit allowance quotas
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs font-semibold">
-                      {feeValidities.length} {feeValidities.length === 1 ? "Record" : "Records"}
-                    </Badge>
-                  </CardHeader>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {feeValidities.map((fv, i) => {
-                        const isExpired = fv.valid_till ? new Date(fv.valid_till) < new Date() : false;
-                        const visitPct = fv.max_visits ? Math.min(100, Math.round(((fv.visit_count || 0) / fv.max_visits) * 100)) : 0;
-                        return (
-                          <div
-                            key={fv.id || i}
-                            className={cn(
-                              "p-3.5 rounded-xl border transition-all",
-                              isExpired ? "bg-muted/30 border-border" : "bg-card border-emerald-500/30 shadow-2xs"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <span className="text-xs font-bold text-foreground block">
-                                  {fv.practitioner_name || fv.practitioner || "Consultant Practitioner"}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground mt-0.5 block">
-                                  Valid: {fv.valid_from || "—"} to {fv.valid_till || "—"}
-                                </span>
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] font-bold uppercase",
-                                  isExpired
-                                    ? "bg-muted text-muted-foreground"
-                                    : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                                )}
-                              >
-                                {isExpired ? "Expired" : "Active"}
-                              </Badge>
-                            </div>
 
-                            <div className="mt-3 pt-2.5 border-t border-border/60">
-                              <div className="flex items-center justify-between text-[11px] mb-1">
-                                <span className="text-muted-foreground">Visits Utilized</span>
-                                <span className="font-semibold text-foreground">
-                                  {fv.visit_count || 0} / {fv.max_visits || "Unlimited"} visits
-                                </span>
-                              </div>
-                              {fv.max_visits && (
-                                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className={cn(
-                                      "h-full transition-all rounded-full",
-                                      visitPct >= 100 ? "bg-rose-500" : "bg-emerald-500"
-                                    )}
-                                    style={{ width: `${visitPct}%` }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* 5. Auto-Logged Patient Medical Record (PMR) Audit Feed */}
               <Card className="shadow-2xs overflow-hidden">
@@ -4206,31 +3029,6 @@ export default function PatientDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Inpatient Records Modal (Marley Parity) */}
-      {patient && (
-        <InpatientRecordsModal
-          open={showInpatientRecordsModal}
-          onOpenChange={setShowInpatientRecordsModal}
-          patientId={patient.id}
-          patientName={patient.patient_name}
-          records={patientInpatients}
-          onRefresh={loadPatient}
-        />
-      )}
-
-      {/* Inpatient Admission Modal (Marley Parity) */}
-      {patient && (
-        <InpatientAdmissionModal
-          open={showAdmissionModal}
-          onOpenChange={setShowAdmissionModal}
-          patientId={patient.id}
-          patientName={patient.patient_name}
-          onSuccess={() => {
-            loadPatient();
-          }}
-        />
-      )}
-
       {/* New Medication Request Modal (Marley Parity) */}
       <NewMedicationRequestModal
         open={newMedReqModalOpen}
@@ -4240,30 +3038,6 @@ export default function PatientDetailPage() {
         onSuccess={loadPatient}
       />
 
-      {/* New Therapy Plan Modal (Marley Parity) */}
-      <NewTherapyPlanModal
-        open={newTherapyPlanModalOpen}
-        onOpenChange={setNewTherapyPlanModalOpen}
-        defaultPatientId={patient ? patient.id : undefined}
-        defaultPatientName={patient?.patient_name}
-        onSuccess={loadPatient}
-      />
-
-      {/* New Therapy Session Modal (Marley Parity) */}
-      <NewTherapySessionModal
-        open={newTherapySessionModalOpen}
-        onOpenChange={setNewTherapySessionModalOpen}
-        defaultPatientId={patient ? patient.id : undefined}
-        defaultPatientName={patient?.patient_name}
-        onSuccess={loadPatient}
-      />
-
-      {/* EEU Digital Medical ID Card Modal */}
-      <EEUMedicalIdCardModal
-        patient={patient}
-        open={showIdCardModal}
-        onClose={() => setShowIdCardModal(false)}
-      />
     </div>
   );
 }

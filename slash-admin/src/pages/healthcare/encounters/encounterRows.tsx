@@ -13,6 +13,7 @@
 import * as React from "react";
 import { Icon } from "@/components/icon";
 import { Input } from "@/ui/input";
+import { Textarea } from "@/ui/textarea";
 import Combobox from "@/components/healthcare/Combobox";
 import {
   GridCell,
@@ -21,6 +22,14 @@ import {
   GridRowActions,
 } from "@/components/healthcare/EncounterGrid";
 import type { CodeValue, Medication } from "@/api/services/healthcareService";
+import {
+  CLINICAL_DOSAGES,
+  CLINICAL_DURATIONS,
+  CLINICAL_DOSAGE_FORMS,
+  CLINICAL_INTERVAL_UOMS,
+  CLINICAL_INTENTS,
+  CLINICAL_PRIORITIES,
+} from "./medicationCatalogData";
 
 /**
  * Code systems whose values back the Intent and Priority pickers. Marley
@@ -242,6 +251,31 @@ export function DrugRowView({
     return b;
   }, [options.stockItems, stockMap]);
 
+  // Derived rich option catalogs merged with internet clinical datasets
+  const dosageOptions = React.useMemo(() => {
+    return Array.from(new Set([...(options.prescriptionDosages ?? []), ...CLINICAL_DOSAGES]));
+  }, [options.prescriptionDosages]);
+
+  const durationOptions = React.useMemo(() => {
+    return Array.from(new Set([...(options.prescriptionDurations ?? []), ...CLINICAL_DURATIONS]));
+  }, [options.prescriptionDurations]);
+
+  const dosageFormOptions = React.useMemo(() => {
+    return Array.from(new Set([...(options.dosageForms ?? []), ...CLINICAL_DOSAGE_FORMS]));
+  }, [options.dosageForms]);
+
+  const intervalUomOptions = React.useMemo(() => {
+    return Array.from(new Set([...(options.intervalUom ?? []), ...CLINICAL_INTERVAL_UOMS]));
+  }, [options.intervalUom]);
+
+  const effectiveIntentOptions = React.useMemo(() => {
+    return Array.from(new Set([...(intentOptions ?? []), ...CLINICAL_INTENTS]));
+  }, [intentOptions]);
+
+  const effectivePriorityOptions = React.useMemo(() => {
+    return Array.from(new Set([...(priorityOptions ?? []), ...CLINICAL_PRIORITIES]));
+  }, [priorityOptions]);
+
   return (
     <>
       <tr className="border-t hover:bg-muted/40 transition-colors">
@@ -314,7 +348,7 @@ export function DrugRowView({
         </GridCell>
         <GridCell>
           <Combobox
-            options={options.prescriptionDosages}
+            options={dosageOptions}
             value={row.dosage}
             onChange={(v) => onChange(index, "dosage", v)}
             placeholder="1-0-1"
@@ -326,7 +360,7 @@ export function DrugRowView({
         </GridCell>
         <GridCell>
           <Combobox
-            options={options.prescriptionDurations}
+            options={durationOptions}
             value={row.period}
             onChange={(v) => onChange(index, "period", v)}
             placeholder="Select"
@@ -337,7 +371,7 @@ export function DrugRowView({
         </GridCell>
         <GridCell>
           <Combobox
-            options={options.dosageForms}
+            options={dosageFormOptions}
             value={row.dosage_form}
             onChange={(v) => onChange(index, "dosage_form", v)}
             placeholder="Select"
@@ -358,14 +392,6 @@ export function DrugRowView({
           <GridDetailField label="Drug Name">
             <Input value={row.drug_name} readOnly className="h-8 text-xs bg-muted" />
           </GridDetailField>
-          <GridDetailField label="Comment">
-            <Input
-              value={row.comment}
-              onChange={(e) => onChange(index, "comment", e.target.value)}
-              disabled={disabled}
-              className="h-8 text-xs"
-            />
-          </GridDetailField>
           <GridDetailField label="Interval">
             <Input
               type="number"
@@ -377,7 +403,7 @@ export function DrugRowView({
           </GridDetailField>
           <GridDetailField label="Interval UOM">
             <Combobox
-              options={options.intervalUom}
+              options={intervalUomOptions}
               value={row.interval_uom}
               onChange={(v) => onChange(index, "interval_uom", v)}
               allowCreate={false}
@@ -396,7 +422,7 @@ export function DrugRowView({
           </GridDetailField>
           <GridDetailField label="Intent">
             <Combobox
-              options={intentOptions}
+              options={effectiveIntentOptions}
               value={row.intent}
               onChange={(v) => onChange(index, "intent", v)}
               disabled={disabled}
@@ -405,11 +431,21 @@ export function DrugRowView({
           </GridDetailField>
           <GridDetailField label="Priority">
             <Combobox
-              options={priorityOptions}
+              options={effectivePriorityOptions}
               value={row.priority}
               onChange={(v) => onChange(index, "priority", v)}
               disabled={disabled}
               className={box}
+            />
+          </GridDetailField>
+          <GridDetailField label="Comment (Dosage Form & Strength)" className="col-span-2 md:col-span-4">
+            <Textarea
+              value={row.comment}
+              onChange={(e) => onChange(index, "comment", e.target.value)}
+              disabled={disabled}
+              placeholder="Dosage form and strength instructions"
+              rows={Math.max(2, Math.min(8, (row.comment || "").split("\n").length))}
+              className="text-xs min-h-[58px] leading-relaxed resize-y bg-background font-normal whitespace-pre-wrap"
             />
           </GridDetailField>
         </GridDetailRow>

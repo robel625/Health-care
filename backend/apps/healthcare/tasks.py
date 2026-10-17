@@ -130,28 +130,69 @@ def task_notify_lab_result_approved(lab_test_id):
         lab_test.service_request.status = "Completed"
         lab_test.service_request.save(update_fields=["status"])
 
-    subject = f"Lab Result Approved: {test_name} for {patient_name}"
+    # Determine the responsible practitioner for this patient (including reassignments)
+    responsible_practitioner = None
+    doctor_user = None
+
+    if patient:
+        from .models import PatientEncounter, PatientAppointment
+        # Check active encounter
+        latest_enc = PatientEncounter.objects.filter(
+            patient=patient, practitioner__isnull=False
+        ).exclude(status="Cancelled").order_by("-encounter_date", "-id").first()
+        if latest_enc and latest_enc.practitioner and latest_enc.practitioner.user:
+            responsible_practitioner = latest_enc.practitioner
+            doctor_user = latest_enc.practitioner.user
+
+        # If not found or if patient was reassigned to another practitioner
+        if not doctor_user:
+            latest_apt = PatientAppointment.objects.filter(
+                patient=patient, practitioner__isnull=False
+            ).exclude(status__in=["Cancelled", "Closed"]).order_by("-appointment_date", "-id").first()
+            if latest_apt and latest_apt.practitioner and latest_apt.practitioner.user:
+                responsible_practitioner = latest_apt.practitioner
+                doctor_user = latest_apt.practitioner.user
+
+    # Fall back to practitioner directly on lab_test or encounter
+    if not doctor_user and practitioner and practitioner.user:
+        responsible_practitioner = practitioner
+        doctor_user = practitioner.user
+
+    if not doctor_user and lab_test.encounter and lab_test.encounter.practitioner and lab_test.encounter.practitioner.user:
+        responsible_practitioner = lab_test.encounter.practitioner
+        doctor_user = lab_test.encounter.practitioner.user
+
+    practitioner_display = (
+        responsible_practitioner.practitioner_name
+        if responsible_practitioner
+        else (practitioner_name or "Attending Physician")
+    )
+    patient_ref = f"{patient_name} (ID: {patient.patient_id if patient else 'N/A'})"
+    test_route = f"/healthcare/lab-tests/{lab_test.id}"
+
+    subject = f"[LAB RESULT VERIFIED] {test_name} for {patient_name} ({lab_test.status})"
     message = (
-        f"The laboratory has completed and approved results for '{test_name}'.\n"
-        f"Patient: {patient_name}\n"
-        f"Verified on: {lab_test.approved_date or timezone.now().date()}\n"
-        f"Test ID: {lab_test.test_id or f'LT-{lab_test.id}'}"
+        f"Diagnostic laboratory result has been verified and released.\n"
+        f"Patient: {patient_ref}\n"
+        f"Completed Test: {test_name}\n"
+        f"Result Status: {lab_test.status} ({lab_test.result or 'Normal'})\n"
+        f"Verified Date: {lab_test.approved_date or timezone.now().date()}\n"
+        f"View Results: {test_route}"
     )
 
-    # 1. In-app notification to the ordering practitioner
-    doctor_user = practitioner.user if practitioner and practitioner.user else None
+    # 1. In-app notification ONLY to the responsible practitioner
     if doctor_user:
         try:
-            NotificationDelivery.objects.create(
-                event="lab_result_approved",
+            from apps.roles.notification_dispatcher import dispatch_notification
+            dispatch_notification(
+                event="lab_test_approved",
                 subject=subject,
                 message=message,
-                channel="dashboard",
-                status="sent",
-                recipient=doctor_user,
-                recipient_name=doctor_user.username,
                 reference_doctype="LabTest",
-                reference_name=lab_test.test_id or str(lab_test.id),
+                reference_name=str(lab_test.id),
+                direct_recipients=[doctor_user],
+                action_url=test_route,
+                category="clinical",
             )
         except Exception as e:
             logger.warning(f"Failed to create doctor notification: {e}")
@@ -211,16 +252,17 @@ def task_notify_lab_result_approved(lab_test_id):
     publish_realtime_event(
         event_type="lab_result_approved",
         data={
-            "title": f"Lab Result Approved: {test_name}",
+            "title": subject,
             "message": message,
             "lab_test_id": lab_test.id,
             "test_id": lab_test.test_id or f"LT-{lab_test.id}",
             "patient_id": patient.id if patient else None,
             "patient_name": patient_name,
-            "practitioner_name": practitioner_name,
+            "practitioner_name": practitioner_display,
             "test_name": test_name,
-            "status": "Approved",
+            "status": lab_test.status,
             "approved_date": str(lab_test.approved_date or timezone.now().date()),
+            "action_url": test_route,
             "timestamp": timezone.now().isoformat(),
         },
         user_id=doctor_user.id if doctor_user else None,

@@ -1,6 +1,7 @@
 import { Icon } from "@/components/icon";
 import { NotificationBadge } from "@/components/notification-badge";
 import { useNotificationStore } from "@/store/notificationStore";
+import { useUserInfo } from "@/store/userStore";
 import { Button } from "@/ui/button";
 import { ScrollArea } from "@/ui/scroll-area";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/ui/sheet";
@@ -57,6 +58,8 @@ interface NotificationDeliveryItem {
   recipient_name: string;
   reference_doctype: string;
   reference_name: string;
+  category?: string;
+  action_url?: string;
   creation: string;
 }
 
@@ -193,18 +196,35 @@ function getRouteForDoc(doctype: string, reference_name?: string): string {
 
 export default function NoticeButton() {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("all");
   const navigate = useNavigate();
+
+  const userInfo = useUserInfo();
+  const isHealthcareAdmin = (() => {
+    if (userInfo?.is_staff || (userInfo as any)?.is_superuser) return true;
+    const adminRoleNames = ["Healthcare Administrator", "System Manager", "Administrator"];
+    const roles = userInfo?.roles || [];
+    return roles.some((r: any) => {
+      const roleName = typeof r === "string" ? r : r?.name || "";
+      return adminRoleNames.includes(roleName);
+    });
+  })();
+
+  const [activeTab, setActiveTab] = useState(() => (isHealthcareAdmin ? "all" : "clinical"));
+
+  useEffect(() => {
+    if (!isHealthcareAdmin && (activeTab === "all" || activeTab === "errors")) {
+      setActiveTab("clinical");
+    } else if (isHealthcareAdmin && (activeTab === "clinical" || activeTab === "comms" || activeTab === "comments")) {
+      setActiveTab("all");
+    }
+  }, [isHealthcareAdmin, activeTab]);
 
   const counts = useNotificationStore((s) => s.counts);
   const fetchCounts = useNotificationStore((s) => s.actions.fetchCounts);
 
-  const totalCount =
-    counts.error_logs +
-    counts.communications +
-    counts.comments +
-    counts.workflow_actions +
-    (counts.unread_notifications || 0);
+  const totalCount = isHealthcareAdmin
+    ? counts.error_logs + (counts.job_failures || 0) + (counts.failed_deliveries || 0) + (counts.unread_notifications || 0)
+    : (counts.unread_notifications || 0) + counts.communications + counts.comments;
 
   // Fetch counts when drawer opens
   useEffect(() => {
@@ -261,14 +281,19 @@ export default function NoticeButton() {
           </SheetHeader>
 
           <div className="px-4 flex-1 overflow-hidden">
-            <NoticeTabs activeTab={activeTab} onTabChange={setActiveTab} onNavigate={handleNavigate} />
+            <NoticeTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              onNavigate={handleNavigate}
+              isHealthcareAdmin={isHealthcareAdmin}
+            />
           </div>
 
           <SheetFooter className="flex flex-row h-14 w-full items-center justify-between p-4 shrink-0 border-t">
             <Button
               variant="outline"
               className="flex-1 mr-2"
-              onClick={() => handleNavigate("/erp/error-logs")}
+              onClick={() => handleNavigate(isHealthcareAdmin ? "/erp/error-logs" : "/healthcare/appointments")}
             >
               View All
             </Button>
@@ -293,31 +318,47 @@ interface NoticeTabsProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onNavigate: (path: string) => void;
+  isHealthcareAdmin: boolean;
 }
 
-function NoticeTabs({ activeTab, onTabChange, onNavigate }: NoticeTabsProps) {
+function NoticeTabs({ activeTab, onTabChange, onNavigate, isHealthcareAdmin }: NoticeTabsProps) {
   const counts = useNotificationStore((s) => s.counts);
+
+  if (isHealthcareAdmin) {
+    const errorCount = counts.error_logs + (counts.failed_deliveries || 0);
+    const totalAdmin = errorCount + (counts.unread_notifications || 0);
+
+    return (
+      <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
+        <TabsList className="gap-2 w-full flex justify-between items-center shrink-0">
+          <TabsTrigger value="all" className="flex items-center justify-center gap-1 flex-1">
+            <span>All</span>
+            {totalAdmin > 0 && <Badge variant="default">{totalAdmin}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="errors" className="flex items-center justify-center gap-1 flex-1">
+            <span>Errors</span>
+            {errorCount > 0 && <Badge variant="destructive">{errorCount}</Badge>}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <AllNotifications onNavigate={onNavigate} />
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="errors" className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <ErrorLogsList onNavigate={onNavigate} />
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
+    );
+  }
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full h-full flex flex-col">
       <TabsList className="gap-2 w-full flex justify-between items-center shrink-0">
-        <TabsTrigger value="all" className="flex items-center gap-1">
-          <span>All</span>
-          {counts.error_logs + counts.communications + counts.comments > 0 && (
-            <Badge variant="default">
-              {counts.error_logs + counts.communications + counts.comments}
-            </Badge>
-          )}
-        </TabsTrigger>
-        <TabsTrigger value="errors" className="flex items-center gap-1">
-          <span>Errors</span>
-          {counts.error_logs > 0 && <Badge variant="destructive">{counts.error_logs}</Badge>}
-        </TabsTrigger>
-        <TabsTrigger value="comms" className="flex items-center gap-1">
-          <span>Messages</span>
-          {counts.communications > 0 && <Badge variant="info">{counts.communications}</Badge>}
-        </TabsTrigger>
-        <TabsTrigger value="clinical" className="flex items-center gap-1">
+        <TabsTrigger value="clinical" className="flex items-center justify-center gap-1 flex-1">
           <span>Clinical</span>
           {(counts.unread_notifications || 0) > 0 && (
             <Badge variant="default" className="bg-emerald-600 text-white">
@@ -325,25 +366,19 @@ function NoticeTabs({ activeTab, onTabChange, onNavigate }: NoticeTabsProps) {
             </Badge>
           )}
         </TabsTrigger>
-        <TabsTrigger value="comments" className="flex items-center gap-1">
+        <TabsTrigger value="comms" className="flex items-center justify-center gap-1 flex-1">
+          <span>Messages</span>
+          {counts.communications > 0 && <Badge variant="info">{counts.communications}</Badge>}
+        </TabsTrigger>
+        <TabsTrigger value="comments" className="flex items-center justify-center gap-1 flex-1">
           <span>Comments</span>
           {counts.comments > 0 && <Badge variant="success">{counts.comments}</Badge>}
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="all" className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <AllNotifications onNavigate={onNavigate} />
-        </ScrollArea>
-      </TabsContent>
       <TabsContent value="clinical" className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
           <ClinicalNotificationsList onNavigate={onNavigate} />
-        </ScrollArea>
-      </TabsContent>
-      <TabsContent value="errors" className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <ErrorLogsList onNavigate={onNavigate} />
         </ScrollArea>
       </TabsContent>
       <TabsContent value="comms" className="flex-1 overflow-hidden">
@@ -368,6 +403,7 @@ import { Badge } from "@/ui/badge";
 
 function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
+  const [failedDeliveries, setFailedDeliveries] = useState<NotificationDeliveryItem[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [clinical, setClinical] = useState<NotificationDeliveryItem[]>([]);
@@ -377,10 +413,14 @@ function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [errors, comms, commentsData, clinicalData] = await Promise.allSettled([
+        const [errors, failedDels, comms, commentsData, clinicalData] = await Promise.allSettled([
           apiClient.get<{ results: ErrorLogItem[] }>({
             url: "/roles/error-logs/",
             params: { page_size: 5, ordering: "-creation" },
+          }),
+          apiClient.get<{ results: NotificationDeliveryItem[] }>({
+            url: "/roles/notification-deliveries/",
+            params: { category: "errors", page_size: 5, ordering: "-creation" },
           }),
           apiClient.get<{ results: CommunicationItem[] }>({
             url: "/roles/communications/",
@@ -396,6 +436,7 @@ function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }
           }),
         ]);
         if (errors.status === "fulfilled") setErrorLogs(errors.value.results || []);
+        if (failedDels.status === "fulfilled") setFailedDeliveries(failedDels.value.results || []);
         if (comms.status === "fulfilled") setCommunications(comms.value.results || []);
         if (commentsData.status === "fulfilled") setComments(commentsData.value.results || []);
         if (clinicalData.status === "fulfilled") setClinical(clinicalData.value.results || []);
@@ -424,6 +465,7 @@ function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }
 
   const allItems = [
     ...clinical.map((cl) => ({ type: "clinical" as const, data: cl, date: cl.creation })),
+    ...failedDeliveries.map((f) => ({ type: "failed_delivery" as const, data: f, date: f.creation })),
     ...errorLogs.map((e) => ({ type: "error" as const, data: e, date: e.creation })),
     ...communications.map((c) => ({ type: "communication" as const, data: c, date: c.creation })),
     ...comments.map((c) => ({ type: "comment" as const, data: c, date: c.creation })),
@@ -443,6 +485,8 @@ function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }
               onMarkRead={handleClinicalMarkRead}
             />
           );
+        if (item.type === "failed_delivery")
+          return <FailedDeliveryRow key={`fd-${idx}`} item={item.data} onNavigate={onNavigate} />;
         if (item.type === "error") return <ErrorLogRow key={`e-${idx}`} item={item.data} onNavigate={onNavigate} />;
         if (item.type === "communication") return <CommunicationRow key={`c-${idx}`} item={item.data} onNavigate={onNavigate} />;
         return <CommentRow key={`co-${idx}`} item={item.data} onNavigate={onNavigate} />;
@@ -455,26 +499,92 @@ function AllNotifications({ onNavigate }: { onNavigate: (path: string) => void }
 
 function ErrorLogsList({ onNavigate }: { onNavigate: (path: string) => void }) {
   const [items, setItems] = useState<ErrorLogItem[]>([]);
+  const [failedDeliveries, setFailedDeliveries] = useState<NotificationDeliveryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiClient
-      .get<{ results: ErrorLogItem[] }>({
+    setLoading(true);
+    Promise.allSettled([
+      apiClient.get<{ results: ErrorLogItem[] }>({
         url: "/roles/error-logs/",
         params: { page_size: 20, ordering: "-creation" },
+      }),
+      apiClient.get<{ results: NotificationDeliveryItem[] }>({
+        url: "/roles/notification-deliveries/",
+        params: { category: "errors", page_size: 20, ordering: "-creation" },
+      }),
+    ])
+      .then(([errRes, delRes]) => {
+        if (errRes.status === "fulfilled") setItems(errRes.value.results || []);
+        if (delRes.status === "fulfilled") setFailedDeliveries(delRes.value.results || []);
       })
-      .then((res) => setItems(res.results || []))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <LoadingState />;
-  if (items.length === 0) return <EmptyState message="No error logs" />;
+
+  const combined = [
+    ...items.map((e) => ({ type: "error" as const, data: e, date: e.creation })),
+    ...failedDeliveries.map((f) => ({ type: "failed_delivery" as const, data: f, date: f.creation })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  if (combined.length === 0) return <EmptyState message="No error logs or delivery failures" />;
 
   return (
     <div className="space-y-0">
-      {items.map((item) => (
-        <ErrorLogRow key={item.id} item={item} onNavigate={onNavigate} />
-      ))}
+      {combined.map((item, idx) =>
+        item.type === "error" ? (
+          <ErrorLogRow key={`e-${item.data.id || idx}`} item={item.data} onNavigate={onNavigate} />
+        ) : (
+          <FailedDeliveryRow key={`fd-${item.data.id || idx}`} item={item.data} onNavigate={onNavigate} />
+        )
+      )}
+    </div>
+  );
+}
+
+function FailedDeliveryRow({
+  item,
+  onNavigate,
+}: {
+  item: NotificationDeliveryItem;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <div
+      className="flex items-start gap-3 py-3 border-b border-border last:border-b-0 cursor-pointer hover:bg-accent/50 transition-colors -mx-1 px-1 rounded"
+      onClick={() => onNavigate(item.action_url || "/healthcare")}
+    >
+      <div className="w-9 h-9 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 mt-0.5">
+        <Icon icon="solar:danger-triangle-bold" size={18} className="text-rose-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <Badge variant="destructive" className="text-[10px] px-1.5 font-medium">
+            Delivery Failure
+          </Badge>
+          <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase tracking-wider text-muted-foreground">
+            {item.channel}
+          </Badge>
+          {item.reference_doctype && (
+            <Text variant="caption" color="secondary">
+              {item.reference_doctype}
+            </Text>
+          )}
+        </div>
+        <Text variant="subTitle2" className="mt-1 line-clamp-2">
+          {item.subject}
+        </Text>
+        <Text variant="caption" className="mt-1 line-clamp-2 text-muted-foreground">
+          {item.message}
+        </Text>
+        <div className="flex items-center gap-2 mt-1">
+          <Text variant="caption" color="secondary">
+            {timeAgo(item.creation)}
+            {item.recipient_name && ` • Recipient: ${item.recipient_name}`}
+          </Text>
+        </div>
+      </div>
     </div>
   );
 }
@@ -666,6 +776,22 @@ function getClinicalEventMeta(event: string): ClinicalEventMeta {
         iconColor: "text-rose-600",
         bgColor: "bg-rose-500/10",
       };
+    case "patient_assigned":
+      return {
+        badge: "Patient Assigned",
+        badgeClass: "bg-blue-600 text-white font-medium",
+        icon: "solar:user-check-bold",
+        iconColor: "text-blue-600",
+        bgColor: "bg-blue-500/10",
+      };
+    case "patient_reassigned":
+      return {
+        badge: "Patient Reassigned",
+        badgeClass: "bg-amber-600 text-white font-medium",
+        icon: "solar:user-cross-bold",
+        iconColor: "text-amber-600",
+        bgColor: "bg-amber-500/10",
+      };
     case "patient_appointment_created":
       return {
         badge: "Appointment",
@@ -844,7 +970,7 @@ function ClinicalNotificationRow({
   onMarkRead?: (id: number) => void;
 }) {
   const meta = getClinicalEventMeta(item.event);
-  const route = getRouteForDoc(item.reference_doctype, item.reference_name);
+  const route = item.action_url || getRouteForDoc(item.reference_doctype, item.reference_name);
 
   const handleClick = () => {
     if (item.status !== "read" && onMarkRead) {

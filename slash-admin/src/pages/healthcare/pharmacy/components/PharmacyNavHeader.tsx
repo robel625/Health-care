@@ -12,8 +12,7 @@ interface PharmacyNavHeaderProps {
 
 const TABS = [
   { label: "Dashboard", path: "/healthcare/pharmacy", icon: "solar:widget-2-bold-duotone", badge: null },
-  { label: "Outpatient Dispensing", path: "/healthcare/pharmacy/outpatient", icon: "solar:bag-check-bold-duotone", badge: "POS" },
-  { label: "Inpatient Medication Entries", path: "/healthcare/pharmacy/medication-entry", icon: "solar:clipboard-check-bold-duotone", badge: null },
+  { label: "Outpatient Dispensing", path: "/healthcare/pharmacy/outpatient", icon: "solar:bag-check-bold-duotone", badge: "Dispensary" },
   { label: "Prescriptions", path: "/healthcare/pharmacy/medication-requests", icon: "solar:pill-bold-duotone", badge: "Rx" },
   { label: "Pharmacy Stock", path: "/healthcare/pharmacy/stock", icon: "solar:box-minimalistic-bold-duotone", badge: null },
   { label: "Stock Intake Console", path: "/healthcare/pharmacy/stock/intake", icon: "solar:box-bold-duotone", badge: "Intake" },

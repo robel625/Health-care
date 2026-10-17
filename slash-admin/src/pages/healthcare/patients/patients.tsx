@@ -13,9 +13,10 @@ import Avatar from "@/components/Avatar";
 import type { Patient } from "@/api/services/healthcareService";
 import { useDoctypePermissions } from "@/utils/permissions";
 import { Badge } from "@/ui/badge";
-import { formatAge } from "@/utils/age";
+import { formatAge, formatAgeYears } from "@/utils/age";
 import { cn, extractErrorMessage } from "@/utils";
 import { toast } from "sonner";
+import BulkEmployeeImportModal from "./components/BulkEmployeeImportModal";
 
 interface Filters {
   search: string;
@@ -68,13 +69,14 @@ export default function PatientsPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [saving, setSaving] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   // High-level KPI counts
   const [kpiCounts, setKpiCounts] = useState({
     active: 0,
-    admitted: 0,
+    staffCount: 0,
   });
 
   const [quickForm, setQuickForm] = useState({
@@ -154,15 +156,15 @@ export default function PatientsPage() {
   // Load ancillary metadata & KPI metrics
   const loadKpis = useCallback(async () => {
     try {
-      const [tagsRes, activeRes, inptRes] = await Promise.all([
+      const [tagsRes, activeRes, staffRes] = await Promise.all([
         HealthcareApi.docTags.allTags({ doctype: "Patient" }).catch(() => []),
         HealthcareApi.patients.list({ status: "Active", page_size: 1 }).catch(() => ({ count: 0 })),
-        HealthcareApi.inpatientRecords.list({ status: "Admitted", page_size: 1 }).catch(() => ({ count: 0 })),
+        HealthcareApi.patients.list({ eeu_beneficiary_type: "Staff", page_size: 1 }).catch(() => ({ count: 0 })),
       ]);
       setAvailableTags(Array.isArray(tagsRes) ? tagsRes : []);
       setKpiCounts({
         active: (activeRes as any).count ?? 0,
-        admitted: (inptRes as any).count ?? 0,
+        staffCount: (staffRes as any).count ?? 0,
       });
     } catch {
       // ignore
@@ -336,13 +338,17 @@ export default function PatientsPage() {
                 <span className="text-[10px] font-mono font-semibold text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
                   {r.patient_id || `PAT-${r.id}`}
                 </span>
-                {(r.company_affiliation?.includes("EEP") || r.eeu_staff_id?.startsWith("EEP")) ? (
-                  <span className="text-[10px] font-mono font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 px-1.5 py-0.2 rounded" title="Ethiopian Electric Power (EEP)">
-                    EEP {r.eeu_staff_id ? `• ${r.eeu_staff_id}` : ""}
+                {(r.company_affiliation?.includes("EEFC") || r.company_affiliation?.includes("Football") || r.eeu_staff_id?.startsWith("EEFC")) ? (
+                  <span className="text-[10px] font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 px-1.5 py-0.2 rounded" title="Ethiopian Electric Football club (EEFC)">
+                    EEFC {r.eeu_staff_id ? `• ${r.eeu_staff_id}` : ""}
                   </span>
-                ) : (r.company_affiliation?.includes("Contractor") || r.company_affiliation?.includes("Other") || r.eeu_staff_id?.startsWith("others")) ? (
-                  <span className="text-[10px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded" title="Contractor / Construction / Other">
-                    others {r.eeu_staff_id ? `• ${r.eeu_staff_id}` : ""}
+                ) : (r.company_affiliation?.includes("Retired") || r.eeu_staff_id?.startsWith("RET")) ? (
+                  <span className="text-[10px] font-mono font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 px-1.5 py-0.2 rounded" title="Retired Employee">
+                    Retired {r.eeu_staff_id ? `• ${r.eeu_staff_id}` : ""}
+                  </span>
+                ) : (r.company_affiliation?.includes("Other") || r.company_affiliation?.includes("Contractor") || r.eeu_staff_id?.startsWith("others")) ? (
+                  <span className="text-[10px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded" title="Others">
+                    Others {r.eeu_staff_id ? `• ${r.eeu_staff_id}` : ""}
                   </span>
                 ) : (r.eeu_staff_id || r.company_affiliation?.includes("EEU")) ? (
                   <span className="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded" title="Ethiopian Electric Utility (EEU)">
@@ -365,7 +371,7 @@ export default function PatientsPage() {
       key: "demographics",
       width: 140,
       render: (_, r) => {
-        const ageStr = formatAge(r.dob, r.age);
+        const ageStr = formatAgeYears(r.dob, r.age);
         const isMale = r.sex?.toLowerCase() === "male";
         const isFemale = r.sex?.toLowerCase() === "female";
 
@@ -384,7 +390,7 @@ export default function PatientsPage() {
             </Badge>
             <p className="text-xs text-foreground font-medium flex items-center gap-1">
               <Icon icon="solar:calendar-linear" size={12} className="text-muted-foreground" />
-              <span>{ageStr}</span>
+              <span>{ageStr || "—"}</span>
             </p>
           </div>
         );
@@ -407,7 +413,7 @@ export default function PatientsPage() {
     {
       title: "Contact Communications",
       key: "contact",
-      width: 190,
+      width: 200,
       render: (_, r) => (
         <div className="space-y-1 text-xs">
           {r.mobile ? (
@@ -426,61 +432,11 @@ export default function PatientsPage() {
             <a
               href={`mailto:${r.email}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-blue-600 text-[11px] truncate max-w-[170px] transition-colors"
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-blue-600 text-[11px] truncate max-w-[180px] transition-colors"
             >
               <Icon icon="solar:letter-bold" size={11} className="text-blue-500 shrink-0" />
               <span className="truncate">{r.email}</span>
             </a>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: "Residence",
-      key: "address",
-      width: 150,
-      render: (_, r) => {
-        const parts = [r.city, r.state, r.country].filter(Boolean);
-        if (parts.length === 0) return <span className="text-muted-foreground/40 text-xs">—</span>;
-        return (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Icon icon="solar:map-point-bold" size={13} className="text-primary/70 shrink-0" />
-            <span className="truncate" title={parts.join(", ")}>
-              {parts.join(", ")}
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      title: "Clinical Tags",
-      dataIndex: "tags",
-      width: 160,
-      render: (tags: string[] = []) => (
-        <div className="flex flex-wrap gap-1">
-          {tags && tags.length > 0 ? (
-            tags.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  updateFilter("tag", t);
-                }}
-                className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full border transition-colors cursor-pointer flex items-center gap-1 font-medium",
-                  filters.tag === t
-                    ? "bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-500/40 font-bold shadow-2xs"
-                    : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20 hover:bg-blue-500/20"
-                )}
-                title={`Filter by tag "${t}"`}
-              >
-                <span>#</span>
-                <span>{t}</span>
-              </button>
-            ))
-          ) : (
-            <span className="text-muted-foreground/30 text-xs">—</span>
           )}
         </div>
       ),
@@ -567,9 +523,10 @@ export default function PatientsPage() {
   if (filters.blood_group) filterChips.push({ key: "blood_group", label: "Blood Group", value: filters.blood_group });
   if (filters.tag) filterChips.push({ key: "tag", label: "Tag", value: `#${filters.tag}` });
   if (filters.company_affiliation) {
-    const isEEP = filters.company_affiliation.includes("EEP");
-    const isOther = filters.company_affiliation.includes("Contractor") || filters.company_affiliation.includes("Other");
-    filterChips.push({ key: "company_affiliation", label: "Company", value: isEEP ? "EEP" : isOther ? "Others" : "EEU" });
+    const isEEFC = filters.company_affiliation.includes("EEFC") || filters.company_affiliation.includes("Football");
+    const isRetired = filters.company_affiliation.includes("Retired");
+    const isOther = filters.company_affiliation.includes("Other");
+    filterChips.push({ key: "company_affiliation", label: "Scheme", value: isEEFC ? "EEFC" : isRetired ? "Retired" : isOther ? "Others" : "EEU" });
   }
   if (filters.mobile) filterChips.push({ key: "mobile", label: "Mobile", value: filters.mobile });
   if (filters.email) filterChips.push({ key: "email", label: "Email", value: filters.email });
@@ -584,7 +541,7 @@ export default function PatientsPage() {
 
   const qf = quickForm;
   const quickFullName = `${qf.first_name} ${qf.middle_name} ${qf.last_name}`.trim();
-  const quickCalculatedAge = formatAge(qf.dob);
+  const quickCalculatedAge = formatAgeYears(qf.dob);
 
   return (
     <div className="space-y-5">
@@ -625,6 +582,16 @@ export default function PatientsPage() {
 
             {canCreate && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowBulkImport(true)}
+                  className="h-9 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  <Icon icon="solar:file-smile-bold" size={14} />
+                  + Bulk Import
+                </Button>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -681,20 +648,17 @@ export default function PatientsPage() {
             </div>
           </div>
 
-          {/* Card 3: Admitted Inpatients */}
+          {/* Card 3: Primary Staff Employees */}
           <div className="p-3.5 rounded-xl border bg-muted/20 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                Admitted Inpatients
+                Primary Employees
               </span>
-              <span className="text-xl font-extrabold text-foreground mt-0.5 block">{kpiCounts.admitted}</span>
-              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                Active Bed Stays
-              </span>
+              <span className="text-xl font-extrabold text-foreground mt-0.5 block">{kpiCounts.staffCount}</span>
+              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">Direct Payroll Staff</span>
             </div>
             <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600">
-              <Icon icon="solar:bed-bold-duotone" size={20} />
+              <Icon icon="solar:user-id-bold-duotone" size={20} />
             </div>
           </div>
 
@@ -753,10 +717,11 @@ export default function PatientsPage() {
             value={filters.company_affiliation}
             onChange={(e) => updateFilter("company_affiliation", e.target.value)}
           >
-            <option value="">Company: All (EEU, EEP & Contractors)</option>
+            <option value="">Scheme: All Schemes</option>
             <option value="Ethiopian Electric Utility (EEU)">EEU Only (EEU-)</option>
-            <option value="Ethiopian Electric Power (EEP)">EEP Only (EEP-)</option>
-            <option value="Contractor / Other">Construction / Others (others-)</option>
+            <option value="Ethiopian Electric Football club (EEFC)">EEFC Football Club (EEFC-)</option>
+            <option value="Retired Employee">Retired Employee (RET-)</option>
+            <option value="Others">Others (others-)</option>
           </select>
 
           {/* Gender Quick Select */}
@@ -876,7 +841,7 @@ export default function PatientsPage() {
                   <div className="relative">
                     <Icon icon="solar:card-2-linear" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="e.g. 657854, EEU-, EEP-..."
+                      placeholder="e.g. 657854, EEU-, EEFC-, RET-..."
                       value={filters.staff_id}
                       onChange={(e) => updateFilter("staff_id", e.target.value)}
                       className="pl-8 h-8 text-xs font-mono bg-background"
@@ -1314,7 +1279,7 @@ export default function PatientsPage() {
 
             <Separator />
 
-            {/* Corporate Affiliation (EEU / EEP / Contractor) */}
+            {/* Corporate Affiliation (EEU / EEFC / Retired / Others) */}
             <div className="space-y-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                 3. Corporate Employer Affiliation
@@ -1328,12 +1293,14 @@ export default function PatientsPage() {
                     onChange={(e) => {
                       const newAffil = e.target.value;
                       const rawNum = (qf.eeu_staff_id || "")
-                        .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-                        .replace(/^(EEU|EEP|others)-/i, "")
+                        .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+                        .replace(/^(EEU|EEFC|RET|others)-/i, "")
                         .replace(/^EMP-?/i, "");
-                      const prefix = newAffil.includes("EEP")
-                        ? "EEP-"
-                        : (newAffil.includes("Contractor") || newAffil.includes("Other"))
+                      const prefix = (newAffil.includes("EEFC") || newAffil.includes("Football"))
+                        ? "EEFC-"
+                        : newAffil.includes("Retired")
+                        ? "RET-"
+                        : newAffil.includes("Other")
                         ? "others-"
                         : "EEU-";
                       setQuickForm({
@@ -1344,50 +1311,67 @@ export default function PatientsPage() {
                     }}
                   >
                     <option value="Ethiopian Electric Utility (EEU)">Ethiopian Electric Utility (EEU)</option>
-                    <option value="Ethiopian Electric Power (EEP)">Ethiopian Electric Power (EEP)</option>
-                    <option value="Contractor / Other">Construction / Contractor / Other</option>
+                    <option value="Ethiopian Electric Football club (EEFC)">Ethiopian Electric Football club (EEFC)</option>
+                    <option value="Retired Employee">Retired Employee</option>
+                    <option value="Others">Others</option>
                   </select>
                 </div>
                 <div>
                   <Label className="text-xs font-semibold flex items-center justify-between">
-                    <span>Staff / Payroll ID</span>
+                    <span>
+                      {qf.company_affiliation?.includes("EEFC")
+                        ? "EEFC Member ID"
+                        : qf.company_affiliation?.includes("Retired")
+                        ? "Pension ID"
+                        : qf.company_affiliation?.includes("Other")
+                        ? "Others ID"
+                        : "Staff ID"}
+                    </span>
                     <span className="text-[10px] text-muted-foreground font-normal">Digits only</span>
                   </Label>
                   <div className="relative mt-1 flex rounded-lg shadow-2xs">
                     <span className={cn(
                       "inline-flex items-center px-2.5 rounded-l-lg border border-r-0 text-xs font-mono font-bold select-none",
-                      qf.company_affiliation?.includes("EEP")
-                        ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                        : (qf.company_affiliation?.includes("Contractor") || qf.company_affiliation?.includes("Other"))
+                      qf.company_affiliation?.includes("EEFC")
+                        ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30"
+                        : qf.company_affiliation?.includes("Retired")
+                        ? "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                        : qf.company_affiliation?.includes("Other")
                         ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
                         : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
                     )}>
-                      {qf.company_affiliation?.includes("EEP")
-                        ? "EEP-"
-                        : (qf.company_affiliation?.includes("Contractor") || qf.company_affiliation?.includes("Other"))
+                      {(qf.company_affiliation?.includes("EEFC") || qf.company_affiliation?.includes("Football"))
+                        ? "EEFC-"
+                        : qf.company_affiliation?.includes("Retired")
+                        ? "RET-"
+                        : qf.company_affiliation?.includes("Other")
                         ? "others-"
                         : "EEU-"}
                     </span>
                     <Input
                       className="rounded-l-none h-8 text-xs font-mono font-bold tracking-wider"
                       placeholder={
-                        qf.company_affiliation?.includes("EEP")
-                          ? "765767"
-                          : (qf.company_affiliation?.includes("Contractor") || qf.company_affiliation?.includes("Other"))
+                        qf.company_affiliation?.includes("EEFC")
+                          ? "10023"
+                          : qf.company_affiliation?.includes("Retired")
+                          ? "20412"
+                          : qf.company_affiliation?.includes("Other")
                           ? "578879"
                           : "657854"
                       }
                       value={
                         (qf.eeu_staff_id || "")
-                          .replace(/^(EEU|EEP|others)-EMP-?/i, "")
-                          .replace(/^(EEU|EEP|others)-/i, "")
+                          .replace(/^(EEU|EEFC|RET|others)-EMP-?/i, "")
+                          .replace(/^(EEU|EEFC|RET|others)-/i, "")
                           .replace(/^EMP-?/i, "")
                       }
                       onChange={(e) => {
                         const rawDigits = e.target.value.replace(/[^0-9]/g, "");
-                        const prefix = qf.company_affiliation?.includes("EEP")
-                          ? "EEP-"
-                          : (qf.company_affiliation?.includes("Contractor") || qf.company_affiliation?.includes("Other"))
+                        const prefix = (qf.company_affiliation?.includes("EEFC") || qf.company_affiliation?.includes("Football"))
+                          ? "EEFC-"
+                          : qf.company_affiliation?.includes("Retired")
+                          ? "RET-"
+                          : qf.company_affiliation?.includes("Other")
                           ? "others-"
                           : "EEU-";
                         setQuickForm({
@@ -1550,6 +1534,15 @@ export default function PatientsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <BulkEmployeeImportModal
+        open={showBulkImport}
+        onOpenChange={setShowBulkImport}
+        onSuccess={() => {
+          loadData();
+          loadKpis();
+        }}
+      />
     </div>
   );
 }

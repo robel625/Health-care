@@ -175,6 +175,48 @@ export function useIsAdmin(): boolean {
   return !!user?.is_staff;
 }
 
+/**
+ * Granular Role-Based Access Control hook for Healthcare modules.
+ * Determines specific role boundaries and capabilities:
+ * - Healthcare Administrator
+ * - Receptionist
+ * - Practitioner (Doctor)
+ * - Laboratory Technician
+ * - Pharmacist
+ * - Nurse
+ */
+export function useHealthcareRoles() {
+  const user = useUserInfo();
+  const isStaff = !!user?.is_staff;
+  const userRoles = (user?.roles || []).map((r: any) => (typeof r === "string" ? r : r?.name || "")).filter(Boolean);
+
+  const isAdmin = isStaff || userRoles.some(r => ["Healthcare Administrator", "System Manager", "Administrator"].includes(r));
+  const isDoctor = userRoles.some(r => ["Physician", "Doctor", "Healthcare Practitioner", "Practitioner"].includes(r));
+  const isReceptionist = userRoles.some(r => ["Receptionist"].includes(r));
+  const isLabTech = userRoles.some(r => ["Laboratory User", "Lab Technician", "LabTest Approver"].includes(r));
+  const isPharmacist = userRoles.some(r => ["Pharmacy User", "Pharmacist"].includes(r));
+  const isNurse = userRoles.some(r => ["Nursing User", "Nurse"].includes(r));
+
+  return {
+    isStaff,
+    isAdmin,
+    isDoctor,
+    isReceptionist,
+    isLabTech,
+    isPharmacist,
+    isNurse,
+    userRoles,
+    // Granular Clinical & Privacy Boundaries
+    // Administrative privileges must not automatically grant access to confidential clinical records
+    canViewClinical: isDoctor || isNurse,
+    canViewConfidential: isDoctor,
+    canDispense: isPharmacist || isStaff,
+    canManageLabResults: isLabTech || isStaff,
+    canManageAppointments: isReceptionist || isAdmin || isStaff,
+    canRegisterPatient: isReceptionist || isAdmin || isStaff,
+  };
+}
+
 // ── Doctype Name Mapping ──────────────────────────────────────────
 
 /**
@@ -225,21 +267,13 @@ export const PATH_TO_DOCTYPE: Record<string, string> = {
   "/healthcare/sample-collections": "Sample Collection",
   "/healthcare/observations": "Observation",
   "/healthcare/observation-templates": "Observation",
-  "/healthcare/therapy": "Therapy Plan",
-  "/healthcare/inpatient": "Inpatient Record",
-  "/healthcare/insurance": "Insurance Claim",
   "/healthcare/departments": "Medical Department",
-  "/healthcare/emergency": "Emergency Record",
   "/healthcare/medications": "Medication",
   "/healthcare/allergies": "Allergy",
-  "/healthcare/nursing": "Nursing Task",
-  "/healthcare/discharge": "Discharge Summary",
   "/healthcare/reference-data": "Healthcare Settings",
-  "/healthcare/payments": "Healthcare Payment Record",
   // Pharmacy
   "/healthcare/pharmacy": "Medication",
   "/healthcare/pharmacy/outpatient": "Medication Request",
-  "/healthcare/pharmacy/medication-entry": "Inpatient Medication Entry",
   "/healthcare/pharmacy/medication-requests": "Medication Request",
   "/healthcare/pharmacy/medication-requests/new": "Medication Request",
   "/healthcare/pharmacy/stock": "Medication",

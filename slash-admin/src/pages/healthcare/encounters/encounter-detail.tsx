@@ -50,6 +50,14 @@ import { formatAge } from "@/utils/age";
 import { createLinkSource, type LinkSource } from "@/utils/linkSource";
 import ApplyTreatmentPlanDialog from "./ApplyTreatmentPlanDialog";
 import PrescriptionPrintModal from "./PrescriptionPrintModal";
+import CreateSymptomModal from "./CreateSymptomModal";
+import { SYMPTOM_NAMES, getSymptomUrl } from "./symptomsData";
+import CreateDiagnosisModal from "./CreateDiagnosisModal";
+import { DIAGNOSIS_NAMES, getDiagnosisCode } from "./diagnosesData";
+import {
+  ETHIOPIAN_MEDICINE_OPTIONS,
+  getEthiopianMedicineDefaults,
+} from "../pharmacy/ethiopianMedicinesData";
 import type {
   Patient,
   HealthcarePractitioner,
@@ -90,6 +98,7 @@ export default function EncounterDetailPage() {
   const isNew = !id || id === "new";
 
   const [loading, setLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState<{ denied: boolean; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("details");
@@ -106,6 +115,10 @@ export default function EncounterDetailPage() {
   const [clinicalNotes, setClinicalNotes] = useState<ClinicalNoteRow[]>([]);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showCreateSymptomModal, setShowCreateSymptomModal] = useState(false);
+  const [createSymptomInitial, setCreateSymptomInitial] = useState("");
+  const [showCreateDiagnosisModal, setShowCreateDiagnosisModal] = useState(false);
+  const [createDiagnosisInitial, setCreateDiagnosisInitial] = useState("");
   const [inpatientRecordId, setInpatientRecordId] = useState<number | null>(null);
   const [encounterMeta, setEncounterMeta] = useState<{
     creation?: string;
@@ -155,6 +168,7 @@ export default function EncounterDetailPage() {
     encounter_comment: "",
     symptoms_in_print: true,
     diagnosis_in_print: true,
+    is_confidential: false,
     status: "Draft",
   });
 
@@ -295,6 +309,7 @@ export default function EncounterDetailPage() {
           encounter_comment: res.encounter_comment || "",
           symptoms_in_print: res.symptoms_in_print ?? true,
           diagnosis_in_print: res.diagnosis_in_print ?? true,
+          is_confidential: res.is_confidential ?? false,
           status: res.status || "Draft",
         });
         // Taken straight off the encounter rather than looked up in the
@@ -429,8 +444,16 @@ export default function EncounterDetailPage() {
           setClinicalNotes(notesRes.results || []);
         } catch { setClinicalNotes([]); }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (err?.status === 403 || err?.response?.status === 403 || err?.status === 404 || err?.response?.status === 404) {
+        setAccessDenied({
+          denied: true,
+          message:
+            err?.response?.data?.detail ||
+            "Access Restricted: You are not authorized to view or edit this patient encounter. Only the assigned treating practitioner or covering clinical staff may access this medical record.",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -444,11 +467,11 @@ export default function EncounterDetailPage() {
 
   const optionSets = useMemo(
     () => ({
-      complaints: opts("complaints"),
-      diagnosisCatalog: opts("diagnosisCatalog"),
+      complaints: Array.from(new Set([...(opts("complaints") || []), ...SYMPTOM_NAMES])),
+      diagnosisCatalog: Array.from(new Set([...(opts("diagnosisCatalog") || []), ...DIAGNOSIS_NAMES])),
       codeSystems: opts("codeSystems"),
       codeValues: opts("codeValues"),
-      medications: opts("medications"),
+      medications: Array.from(new Set([...(opts("medications") || []), ...ETHIOPIAN_MEDICINE_OPTIONS])),
       stockItems: opts("stockItems"),
       prescriptionDosages: opts("prescriptionDosages"),
       prescriptionDurations: opts("prescriptionDurations"),
@@ -555,12 +578,12 @@ export default function EncounterDetailPage() {
             prev.map((r, idx) =>
               idx === rowIndex
                 ? {
-                    ...r,
-                    in_stock: data.in_stock,
-                    available_qty: data.available_qty,
-                    warehouse: data.warehouse,
-                    checking_stock: false,
-                  }
+                  ...r,
+                  in_stock: data.in_stock,
+                  available_qty: data.available_qty,
+                  warehouse: data.warehouse,
+                  checking_stock: false,
+                }
                 : r
             )
           );
@@ -570,11 +593,11 @@ export default function EncounterDetailPage() {
           prev.map((r, idx) =>
             idx === rowIndex
               ? {
-                  ...r,
-                  in_stock: false,
-                  available_qty: 0,
-                  checking_stock: false,
-                }
+                ...r,
+                in_stock: false,
+                available_qty: 0,
+                checking_stock: false,
+              }
               : r
           )
         );
@@ -601,7 +624,7 @@ export default function EncounterDetailPage() {
           setStockMap((prev) => ({ ...prev, ...res.results }));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [src("medications")?.items?.length]);
 
   // Real-time stock status sync for rows
@@ -639,13 +662,13 @@ export default function EncounterDetailPage() {
       prev.map((r, idx) =>
         idx === i
           ? {
-              ...r,
-              drug_code: code,
-              drug_name: item?.item_name || "",
-              in_stock: cached ? cached.in_stock : undefined,
-              available_qty: cached ? cached.available_qty : undefined,
-              checking_stock: !cached,
-            }
+            ...r,
+            drug_code: code,
+            drug_name: item?.item_name || "",
+            in_stock: cached ? cached.in_stock : undefined,
+            available_qty: cached ? cached.available_qty : undefined,
+            checking_stock: !cached,
+          }
           : r
       )
     );
@@ -664,6 +687,35 @@ export default function EncounterDetailPage() {
       (m: Medication) => medicationLabel(m) === name
     ) as Medication | undefined;
     if (!med) {
+      const ethMed = getEthiopianMedicineDefaults(name);
+      if (ethMed) {
+        const drugCode = ethMed.sub_code || ethMed.major_code || "";
+        const drugName = ethMed.generic_name || name;
+        const cached = stockMap[drugCode] || stockMap[name] || stockMap[drugName] || stockMap[name.toLowerCase()];
+
+        setDrugRows((prev) =>
+          prev.map((r, idx) =>
+            idx === i
+              ? {
+                ...r,
+                medication: name,
+                drug_code: drugCode || r.drug_code || "",
+                drug_name: drugName || r.drug_name || "",
+                dosage: r.dosage || ethMed.default_dosage || "1-0-1",
+                period: r.period || ethMed.default_period || "7 Days",
+                dosage_form: r.dosage_form || ethMed.primary_dosage_form || "Tablet",
+                comment: r.comment || ethMed.dosage_form_and_strength || "",
+                in_stock: cached ? cached.in_stock : undefined,
+                available_qty: cached ? cached.available_qty : undefined,
+                checking_stock: !cached,
+              }
+              : r
+          )
+        );
+        checkDrugStock(drugCode || name, i);
+        return;
+      }
+
       setDrugRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, medication: name } : r)));
       checkDrugStock(name, i);
       return;
@@ -1097,14 +1149,14 @@ export default function EncounterDetailPage() {
     drugs: DrugRow[];
     labs: LabRow[];
     procedures: ProcedureRow[];
-    therapies: TherapyRow[];
+    therapies?: any[];
     symptoms: string[];
     diagnoses: string[];
   }) => {
     if (data.drugs.length > 0) setDrugRows((prev) => [...prev, ...data.drugs]);
     if (data.labs.length > 0) setLabRows((prev) => [...prev, ...data.labs]);
-    if (data.procedures.length > 0) setProcedureRows((prev) => [...prev, ...data.procedures]);
-    if (data.therapies.length > 0) setTherapyRows((prev) => [...prev, ...data.therapies]);
+    const thList = data.therapies || [];
+    if (thList.length > 0) setTherapyRows((prev) => [...prev, ...thList]);
     if (data.symptoms.length > 0) {
       setSymptoms((prev) => Array.from(new Set([...prev, ...data.symptoms])));
     }
@@ -1149,11 +1201,45 @@ export default function EncounterDetailPage() {
     }
   };
 
+  const saveEncounterContextToStorage = () => {
+    try {
+      const payload = {
+        encounterId: id && id !== "new" ? Number(id) : null,
+        patientId: form.patient,
+        patientName,
+        patientAge,
+        patientSex,
+        practitionerId: form.practitioner,
+        practitionerName,
+        departmentName: form.department_name,
+        companyName: form.company,
+        encounterDate: form.encounter_date,
+        appointmentType: form.appointment || "Consultation",
+        comment: form.encounter_comment || noteForm.assessment || noteForm.freeform_content || "",
+        diagnoses: diagnoses.filter(Boolean),
+        symptoms: symptoms.filter(Boolean),
+        medications: drugRows
+          .map((d) => `${d.medication || d.drug_name || d.drug_code || ""} ${d.dosage || ""} ${d.period || ""}`.trim())
+          .filter(Boolean),
+        labs: labRows
+          .map((l) => `${l.lab_test_name || l.lab_test_code || ""}${l.lab_test_comment ? ` (${l.lab_test_comment})` : ""}`.trim())
+          .filter(Boolean),
+        procedures: procedureRows
+          .map((p) => `${p.procedure_name || p.procedure || ""}${p.comments ? ` (${p.comments})` : ""}`.trim())
+          .filter(Boolean),
+      };
+      sessionStorage.setItem("active_encounter_context", JSON.stringify(payload));
+    } catch (e) {
+      console.warn("Could not save encounter context", e);
+    }
+  };
+
   const handleOpenReferral = () => {
     if (!form.patient) {
       setToast({ msg: "Please select a patient before creating an external referral.", type: "err" });
       return;
     }
+    saveEncounterContextToStorage();
     const params = new URLSearchParams();
     params.set("patient", String(form.patient));
     if (id && id !== "new") params.set("encounter", String(id));
@@ -1166,6 +1252,7 @@ export default function EncounterDetailPage() {
       setToast({ msg: "Please select a patient before creating a medical leave slip.", type: "err" });
       return;
     }
+    saveEncounterContextToStorage();
     const params = new URLSearchParams();
     params.set("patient", String(form.patient));
     if (id && id !== "new") params.set("encounter", String(id));
@@ -1360,6 +1447,28 @@ export default function EncounterDetailPage() {
     },
   ];
 
+  if (accessDenied?.denied) {
+    return (
+      <Card className="max-w-2xl mx-auto my-12 border-rose-500/20 bg-card shadow-lg">
+        <CardHeader className="text-center pb-2">
+          <div className="w-14 h-14 mx-auto rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center mb-3">
+            <Icon icon="solar:lock-keyhole-bold-duotone" size={32} />
+          </div>
+          <CardTitle className="text-lg font-bold text-foreground">Encounter Access Restricted</CardTitle>
+          <CardDescription className="text-xs mt-1 text-muted-foreground leading-relaxed max-w-md mx-auto">
+            {accessDenied.message}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center pt-4">
+          <Button onClick={() => navigate("/healthcare/encounters")} variant="outline" className="gap-2 text-xs">
+            <Icon icon="solar:arrow-left-bold" size={14} />
+            Back to Encounters List
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {toast && (
@@ -1388,23 +1497,17 @@ export default function EncounterDetailPage() {
                     "bg-red-100 text-red-700"
                 }`}>{form.status}</span>
             )}
+            {form.is_confidential && (
+              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                <Icon icon="solar:lock-keyhole-bold" size={12} />
+                Confidential
+              </span>
+            )}
             {isNew && <span className="text-xs px-2 py-0.5 rounded font-medium bg-orange-100 text-orange-700">Not Saved</span>}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowTemplateDialog(true)}>
               <Icon icon="solar:document-add-bold" size={14} className="mr-1" /> Apply Template
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenPrintModal}>
-              <Icon icon="solar:printer-bold" size={14} className="mr-1" /> Print Prescription
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenReferral} className="text-blue-700 hover:text-blue-800">
-              <Icon icon="solar:share-circle-bold" size={14} className="mr-1" /> Referral Out
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenLeaveSlip} className="text-teal-700 hover:text-teal-800">
-              <Icon icon="solar:diploma-verified-bold" size={14} className="mr-1" /> Medical Leave
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleOpenMedReq} className="text-rose-700 hover:text-rose-800">
-              <Icon icon="solar:pills-bold" size={14} className="mr-1" /> Medication Request
             </Button>
             {!isNew && inpatientRecordId && (
               <Button variant="outline" size="sm" onClick={handleMakeInpatientMedicationOrder} className="text-purple-600">
@@ -1485,7 +1588,7 @@ export default function EncounterDetailPage() {
 
                   {/* ── Executive Clinical Action Launcher ── */}
                   {(!isNew || !!form.patient) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                       {/* 1. Orders & Prescriptions */}
                       <div className="p-3.5 rounded-2xl border bg-card/60 backdrop-blur-xs shadow-2xs space-y-2 hover:border-rose-500/30 transition-all">
                         <div className="flex items-center justify-between">
@@ -1520,41 +1623,7 @@ export default function EncounterDetailPage() {
                         </div>
                       </div>
 
-                      {/* 2. Inpatient Care */}
-                      <div className="p-3.5 rounded-2xl border bg-card/60 backdrop-blur-xs shadow-2xs space-y-2 hover:border-indigo-500/30 transition-all">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 flex items-center gap-1.5">
-                            <Icon icon="solar:hospital-bold" size={14} /> Inpatient Care
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">Ward</span>
-                        </div>
-                        <div className="space-y-1.5">
-                          {canInpatient && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full justify-start text-xs h-8 border-indigo-500/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/10 font-semibold"
-                              onClick={handleOpenInpatient}
-                            >
-                              <Icon icon="solar:bed-bold" size={14} className="mr-2 text-indigo-500" />
-                              Inpatient File / Ward Bed
-                            </Button>
-                          )}
-                          {!isNew && inpatientRecordId && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full justify-start text-xs h-8 border-purple-500/20 text-purple-700 dark:text-purple-400 hover:bg-purple-500/10 font-semibold"
-                              onClick={handleMakeInpatientMedicationOrder}
-                            >
-                              <Icon icon="solar:clipboard-check-bold" size={14} className="mr-2 text-purple-500" />
-                              Inpatient Med Order
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 3. Triage & Nursing Assessments */}
+                      {/* 2. Clinical Vitals */}
                       <div className="p-3.5 rounded-2xl border bg-card/60 backdrop-blur-xs shadow-2xs space-y-2 hover:border-emerald-500/30 transition-all">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1.5">
@@ -1572,17 +1641,6 @@ export default function EncounterDetailPage() {
                             >
                               <Icon icon="solar:heart-pulse-bold" size={14} className="mr-2 text-emerald-500" />
                               Vital Signs Record
-                            </Button>
-                          )}
-                          {canNursing && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full justify-start text-xs h-8 border-teal-500/20 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 font-semibold"
-                              onClick={() => navigate(`/healthcare/nursing?patient=${form.patient}`)}
-                            >
-                              <Icon icon="solar:checklist-bold" size={14} className="mr-2 text-teal-500" />
-                              Nursing Tasks & Care
                             </Button>
                           )}
                         </div>
@@ -1879,8 +1937,14 @@ export default function EncounterDetailPage() {
                               options={optionSets.complaints}
                               value={symptoms}
                               onChange={setSymptoms}
-                              placeholder="Select or add symptoms"
-                              emptyText="No matching complaints"
+                              getOptionUrl={getSymptomUrl}
+                              doctype="Symptom"
+                              onCreateNew={(text) => {
+                                setCreateSymptomInitial(text || "");
+                                setShowCreateSymptomModal(true);
+                              }}
+                              placeholder="Select or add symptoms (e.g. Cough, Chest pain, Fever)..."
+                              emptyText="No matching symptoms"
                               disabled={!canSave}
                             />
                           </div>
@@ -1893,7 +1957,12 @@ export default function EncounterDetailPage() {
                               options={optionSets.diagnosisCatalog}
                               value={diagnoses}
                               onChange={setDiagnoses}
-                              placeholder="Select or add diagnoses"
+                              doctype="Diagnosis"
+                              onCreateNew={(text) => {
+                                setCreateDiagnosisInitial(text || "");
+                                setShowCreateDiagnosisModal(true);
+                              }}
+                              placeholder="Select or add diagnoses (e.g. Cholera, 1A00, Diabetes)..."
                               emptyText="No matching diagnoses"
                               disabled={!canSave}
                             />
@@ -1920,49 +1989,6 @@ export default function EncounterDetailPage() {
                           Diagnosis In Print
                         </label>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* ── Medical Coding ────────────────────────────────────────── */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <h3 className="font-semibold text-base">Medical Coding</h3>
-                    </CardHeader>
-                    <CardContent>
-                      <EncounterGrid
-                        columns={[
-                          { label: "Code System", required: true, width: "w-52" },
-                          { label: "Code Value", required: true, width: "w-64" },
-                          { label: "Code", width: "w-28" },
-                          { label: "Display", width: "w-56" },
-                          { label: "Definition", width: "w-64" },
-                        ]}
-                        count={codingRows.length}
-                        emptyText="No medical codings added"
-                        addLabel="+ Add"
-                        onAdd={() => setCodingRows((p) => [...p, emptyCoding()])}
-                      >
-                        {codingRows.map((row, i) => {
-                          const value = (src("codeValues")?.items ?? []).find(
-                            (v: CodeValue) => codeValueLabel(v) === row.code_value
-                          );
-                          return (
-                            <CodingRowView
-                              key={row.id ?? `new-${i}`}
-                              row={row}
-                              index={i}
-                              codeSystemOptions={optionSets.codeSystems}
-                              codeValueOptions={codeValuesFor(row.code_system)}
-                              code={value?.code || ""}
-                              display={value?.display || ""}
-                              definition={value?.definition || ""}
-                              disabled={!canSave}
-                              onChange={updateCoding}
-                              onRemove={canSave ? removeCoding : () => { }}
-                            />
-                          );
-                        })}
-                      </EncounterGrid>
                     </CardContent>
                   </Card>
 
@@ -2043,92 +2069,61 @@ export default function EncounterDetailPage() {
                     </CardContent>
                   </Card>
 
-                  {/* ── Procedures (with Marley's Review Details) ────────────── */}
+                  {/* ── Review Details ────────────────────────────────────────── */}
                   <Card>
                     <CardHeader className="pb-3">
-                      <h3 className="font-semibold text-base">Procedures</h3>
+                      <h3 className="font-semibold text-base">Review Details</h3>
                     </CardHeader>
                     <CardContent>
-                      <EncounterGrid
-                        columns={[
-                          { label: "Clinical Procedure", required: true, width: "w-60" },
-                          { label: "Procedure", width: "w-56" },
-                          { label: "Referring", width: "w-56" },
-                          { label: "Date", width: "w-40" },
-                        ]}
-                        count={procedureRows.length}
-                        emptyText="No procedures added"
-                        addLabel="+ Add"
-                        onAdd={() => setProcedureRows((p) => [...p, emptyProcedure()])}
-                      >
-                        {procedureRows.map((row, i) => (
-                          <ProcedureRowView
-                            key={row.id ?? `new-${i}`}
-                            row={row}
-                            index={i}
-                            options={optionSets}
-                            practitionerOptions={practitionerOptions}
-                            intentOptions={intentOptions}
-                            priorityOptions={priorityOptions}
-                            expanded={!!procedureDetails.expanded[i]}
-                            disabled={!canSave}
-                            onToggleDetails={() => procedureDetails.toggle(i)}
-                            onChange={updateProcedure}
-                            onProcedureChange={onProcedureChange}
-                            onRemove={removeProcedure}
-                          />
-                        ))}
-                      </EncounterGrid>
-
-                      {/* Marley places `encounter_comment` — labelled "Review
-                          Details" — inside the Procedures section, right after
-                          the grid. It is a plain Small Text with no picker, so
-                          it stays a textarea. */}
-                      <div className="mt-4">
-                        <Label className="text-sm font-medium text-muted-foreground">Review Details</Label>
-                        <textarea
-                          className="w-full border rounded-md px-3 py-2 text-sm bg-background mt-1.5 min-h-[120px]"
-                          placeholder="Free-text review notes for this encounter"
-                          value={form.encounter_comment}
-                          onChange={(e) => setForm({ ...form, encounter_comment: e.target.value })}
-                          disabled={!canSave}
-                        />
-                      </div>
+                      <Label className="text-sm font-medium text-muted-foreground">Consultation & Review Notes</Label>
+                      <textarea
+                        className="w-full border rounded-md px-3 py-2 text-sm bg-background mt-1.5 min-h-[120px]"
+                        placeholder="Free-text review notes for this encounter"
+                        value={form.encounter_comment}
+                        onChange={(e) => setForm({ ...form, encounter_comment: e.target.value })}
+                        disabled={!canSave}
+                      />
                     </CardContent>
                   </Card>
 
-                  {/* ── Rehabilitation ──────────────────────────────────────── */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <h3 className="font-semibold text-base">Rehabilitation</h3>
+                  {/* ── Patient Privacy & Clinical Confidentiality ── */}
+                  <Card className="border-amber-500/20 bg-amber-500/5 shadow-2xs">
+                    <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Icon icon="solar:shield-warning-bold-duotone" size={20} className="text-amber-600" />
+                        <div>
+                          <CardTitle className="text-sm font-bold text-foreground">Clinical Privacy & Record Confidentiality</CardTitle>
+                          <CardDescription className="text-xs">
+                            Enforce field- and record-level protections for sensitive conditions (HIV/AIDS, Mental Health, Reproductive Health).
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className={cn(
+                        "text-xs font-bold",
+                        form.is_confidential
+                          ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40"
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        {form.is_confidential ? "RESTRICTED ACCESS" : "STANDARD RECORD"}
+                      </Badge>
                     </CardHeader>
-                    <CardContent>
-                      <EncounterGrid
-                        columns={[
-                          { label: "Therapy Type", required: true, width: "w-80" },
-                          { label: "No of Sessions", width: "w-36" },
-                        ]}
-                        count={therapyRows.length}
-                        emptyText="No therapies added"
-                        addLabel="+ Add"
-                        onAdd={() => setTherapyRows((p) => [...p, emptyTherapy()])}
-                      >
-                        {therapyRows.map((row, i) => (
-                          <TherapyRowView
-                            key={row.id ?? `new-${i}`}
-                            row={row}
-                            index={i}
-                            options={optionSets}
-                            intentOptions={intentOptions}
-                            priorityOptions={priorityOptions}
-                            expanded={!!therapyDetails.expanded[i]}
-                            disabled={!canSave}
-                            onToggleDetails={() => therapyDetails.toggle(i)}
-                            onChange={updateTherapy}
-                            onRemove={removeTherapy}
-                          />
-                        ))}
-                      </EncounterGrid>
+                    <CardContent className="pt-0">
+                      <div className="flex items-center gap-3 p-3 rounded-xl border bg-card">
+                        <input
+                          type="checkbox"
+                          id="encounterConfidentialToggle"
+                          checked={!!form.is_confidential}
+                          onChange={(e) => setForm({ ...form, is_confidential: e.target.checked })}
+                          disabled={!canSave}
+                          className="h-4 w-4 rounded border-muted text-primary focus:ring-primary cursor-pointer"
+                        />
+                        <label htmlFor="encounterConfidentialToggle" className="text-xs cursor-pointer select-none">
+                          <span className="font-bold text-foreground block">Designate Encounter as Confidential / Restricted</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            When active, this encounter and its clinical notes, diagnoses, and review comments are restricted exclusively to the treating practitioner. Receptionists, Laboratory Technicians, and unauthorized doctors are strictly blocked.
+                          </span>
+                        </label>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -2146,7 +2141,7 @@ export default function EncounterDetailPage() {
                         <Icon icon="solar:check-circle-bold" size={18} />
                         Downstream Orders Successfully Dispatched On Submission
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-card border">
                           <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600">
                             <Icon icon="solar:test-tube-bold" size={16} />
@@ -2165,28 +2160,19 @@ export default function EncounterDetailPage() {
                             <p className="text-[10px] text-muted-foreground">Pharmacy intake console</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-card border">
-                          <div className="p-1.5 rounded-lg bg-teal-500/10 text-teal-600">
-                            <Icon icon="solar:meditation-bold" size={16} />
-                          </div>
-                          <div>
-                            <span className="font-bold text-foreground">{submitResult.therapy_plans}</span> Therapy Plans
-                            <p className="text-[10px] text-muted-foreground">Rehabilitation department</p>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   )}
 
                   {/* ── Executive Orders KPI Summary Bar ── */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="p-3.5 rounded-2xl border bg-card/60 shadow-2xs">
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Total Directives</span>
                         <Icon icon="solar:clipboard-list-bold-duotone" size={18} className="text-primary" />
                       </div>
                       <p className="text-xl font-bold mt-1 text-foreground">
-                        {linkedLabTests.length + linkedPrescriptions.length + procedureRows.length + therapyRows.length}
+                        {linkedLabTests.length + linkedPrescriptions.length}
                       </p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">Encounter items</p>
                     </div>
@@ -2215,17 +2201,6 @@ export default function EncounterDetailPage() {
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         {linkedPrescriptions.filter((p) => p.status === "Active").length} active prescriptions
                       </p>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl border bg-card/60 shadow-2xs">
-                      <div className="flex items-center justify-between text-xs text-emerald-600">
-                        <span>Procedures / Rehab</span>
-                        <Icon icon="solar:shield-check-bold-duotone" size={18} />
-                      </div>
-                      <p className="text-xl font-bold mt-1 text-emerald-700 dark:text-emerald-400">
-                        {procedureRows.length + therapyRows.length}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Care plans recorded</p>
                     </div>
                   </div>
 
@@ -3139,6 +3114,24 @@ export default function EncounterDetailPage() {
         symptoms={symptoms}
         drugRows={drugRows}
         companyName={form.company || "Healthcare Center"}
+      />
+
+      <CreateSymptomModal
+        open={showCreateSymptomModal}
+        onOpenChange={setShowCreateSymptomModal}
+        initialName={createSymptomInitial}
+        onCreated={(name) => {
+          setSymptoms((prev) => Array.from(new Set([...prev, name])));
+        }}
+      />
+
+      <CreateDiagnosisModal
+        open={showCreateDiagnosisModal}
+        onOpenChange={setShowCreateDiagnosisModal}
+        initialName={createDiagnosisInitial}
+        onCreated={(name) => {
+          setDiagnoses((prev) => Array.from(new Set([...prev, name])));
+        }}
       />
     </div>
   );

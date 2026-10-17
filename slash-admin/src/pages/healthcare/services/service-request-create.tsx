@@ -16,7 +16,6 @@ import {
   type ServiceRequestCategory,
   type LabTestTemplate,
   type ClinicalProcedureTemplate,
-  type TherapyType,
   type ObservationTemplate,
 } from "@/api/services/healthcareService";
 import EntitySelect, { type EntityOption } from "@/components/healthcare/EntitySelect";
@@ -42,15 +41,7 @@ export const MARLEY_TEMPLATE_TYPES = [
     borderActive: "border-blue-500 ring-2 ring-blue-500/20",
     categoryHint: "Procedure",
   },
-  {
-    dt: "Therapy Type",
-    label: "Rehab & Therapy Plan",
-    description: "Physiotherapy, occupational therapy, rehabilitation",
-    icon: "solar:dumbbell-small-bold-duotone",
-    accent: "text-emerald-600 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300",
-    borderActive: "border-emerald-500 ring-2 ring-emerald-500/20",
-    categoryHint: "Therapy",
-  },
+
   {
     dt: "Observation Template",
     label: "Clinical Observation",
@@ -89,7 +80,6 @@ const COMMON_SERVICE_PRESETS = [
   { title: "Chest X-Ray PA View", dt: "Clinical Procedure Template", category: "Radiology", department: "Radiology", sampleReq: false },
   { title: "Ultrasound Abdomen & Pelvis", dt: "Clinical Procedure Template", category: "Radiology", department: "Radiology", sampleReq: false },
   { title: "12-Lead Electrocardiogram (ECG)", dt: "Clinical Procedure Template", category: "Procedure", department: "Cardiology", sampleReq: false },
-  { title: "Physical Therapy Assessment", dt: "Therapy Type", category: "Therapy", department: "Physiotherapy", sampleReq: false },
   { title: "Specialist Surgery Consultation", dt: "Appointment Type", category: "Consultation", department: "Surgery", sampleReq: false },
 ];
 
@@ -128,7 +118,6 @@ export default function ServiceRequestCreatePage() {
   const [categories, setCategories] = useState<ServiceRequestCategory[]>([]);
   const [labTemplates, setLabTemplates] = useState<LabTestTemplate[]>([]);
   const [procedureTemplates, setProcedureTemplates] = useState<ClinicalProcedureTemplate[]>([]);
-  const [therapyTypes, setTherapyTypes] = useState<TherapyType[]>([]);
   const [observationTemplates, setObservationTemplates] = useState<ObservationTemplate[]>([]);
 
   const [loadingLookups, setLoadingLookups] = useState(false);
@@ -146,14 +135,13 @@ export default function ServiceRequestCreatePage() {
     const loadLookups = async () => {
       setLoadingLookups(true);
       try {
-        const [pRes, docRes, deptRes, catRes, labRes, procRes, thRes, obsRes] = await Promise.all([
+        const [pRes, docRes, deptRes, catRes, labRes, procRes, obsRes] = await Promise.all([
           HealthcareApi.patients.list({ page_size: 150 }).catch(() => ({ results: [] })),
           HealthcareApi.practitioners.list({ page_size: 100 }).catch(() => ({ results: [] })),
           HealthcareApi.departments.list({ page_size: 100 }).catch(() => ({ results: [] })),
           HealthcareApi.serviceRequestCategories.list({ page_size: 100 }).catch(() => ({ results: [] })),
           HealthcareApi.labTestTemplates.list({ page_size: 150 }).catch(() => ({ results: [] })),
           HealthcareApi.procedureTemplates.list({ page_size: 150 }).catch(() => ({ results: [] })),
-          HealthcareApi.therapyTypes.list({ page_size: 100 }).catch(() => ({ results: [] })),
           HealthcareApi.observationTemplates.list({ page_size: 100 }).catch(() => ({ results: [] })),
         ]);
 
@@ -165,7 +153,6 @@ export default function ServiceRequestCreatePage() {
         setCategories((catRes as any).results || []);
         setLabTemplates((labRes as any).results || []);
         setProcedureTemplates((procRes as any).results || []);
-        setTherapyTypes((thRes as any).results || []);
         setObservationTemplates((obsRes as any).results || []);
       } catch (err) {
         console.error("Failed to load reference lookups", err);
@@ -324,15 +311,6 @@ export default function ServiceRequestCreatePage() {
           sampleReq: false,
         }));
     }
-    if (templateDt === "Therapy Type") {
-      return therapyTypes
-        .filter((t) => !q || t.therapy_type.toLowerCase().includes(q))
-        .map((t) => ({
-          name: t.therapy_type,
-          desc: t.description || "Rehabilitation & Physical Therapy",
-          sampleReq: false,
-        }));
-    }
     if (templateDt === "Observation Template") {
       return observationTemplates
         .filter((t) => !q || (t.observation || t.preferred_display_name).toLowerCase().includes(q))
@@ -343,7 +321,7 @@ export default function ServiceRequestCreatePage() {
         }));
     }
     return [];
-  }, [templateDt, templateSearch, labTemplates, procedureTemplates, therapyTypes, observationTemplates]);
+  }, [templateDt, templateSearch, labTemplates, procedureTemplates, observationTemplates]);
 
   const patientOptions: EntityOption[] = useMemo(() => {
     return patients.map((p) => ({
@@ -396,7 +374,7 @@ export default function ServiceRequestCreatePage() {
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Order laboratory diagnostics, clinical surgical procedures, rehabilitation therapy, or consultations.
+            Order laboratory diagnostics, clinical surgical procedures, or consultations.
           </p>
         </div>
 

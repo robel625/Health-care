@@ -180,12 +180,14 @@ export function GridDetailRow({
 export function GridDetailField({
   label,
   children,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div>
+    <div className={className}>
       <div className="text-xs font-medium text-muted-foreground mb-1">{label}</div>
       {children}
     </div>

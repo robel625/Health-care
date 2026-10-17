@@ -45,8 +45,8 @@ router.register(r"practitioner-service-unit-schedules", views.PractitionerServic
 router.register(r"appointments", views.PatientAppointmentViewSet)
 router.register(r"appointment-types", views.AppointmentTypeConfigViewSet)
 router.register(r"appointment-type-service-items", views.AppointmentTypeServiceItemViewSet)
-router.register(r"fee-validity", views.FeeValidityViewSet)
-router.register(r"fee-validity-references", views.FeeValidityReferenceViewSet)
+# router.register(r"fee-validity", views.FeeValidityViewSet)
+# router.register(r"fee-validity-references", views.FeeValidityReferenceViewSet)
 
 # ════════════════════════════════════════════════════════════════════════════
 # CLINICAL
@@ -86,45 +86,45 @@ router.register(r"sample-collections", views.SampleCollectionViewSet)
 router.register(r"patient-medical-records", views.PatientMedicalRecordViewSet)
 
 # ════════════════════════════════════════════════════════════════════════════
-# THERAPY
+# THERAPY (Disabled for EEU Staff Clinic - Outpatient Referrals Only)
 # ════════════════════════════════════════════════════════════════════════════
-router.register(r"therapy-types", views.TherapyTypeViewSet)
-router.register(r"therapy-plans", views.TherapyPlanViewSet)
-router.register(r"therapy-sessions", views.TherapySessionViewSet)
-router.register(r"exercises", views.ExerciseViewSet)
-router.register(r"exercise-types", views.ExerciseTypeViewSet)
-router.register(r"exercise-difficulty-levels", views.ExerciseDifficultyLevelViewSet)
-router.register(r"treatment-plan-templates", views.TreatmentPlanTemplateViewSet)
-router.register(r"treatment-plan-template-items", views.TreatmentPlanTemplateItemViewSet)
-router.register(r"treatment-plan-template-practitioners", views.TreatmentPlanTemplatePractitionerViewSet)
-router.register(r"therapy-plan-templates", views.TherapyPlanTemplateViewSet)
-router.register(r"therapy-plan-details", views.TherapyPlanDetailViewSet)
-router.register(r"treatment-counselling", views.TreatmentCounsellingViewSet)
+# router.register(r"therapy-types", views.TherapyTypeViewSet)
+# router.register(r"therapy-plans", views.TherapyPlanViewSet)
+# router.register(r"therapy-sessions", views.TherapySessionViewSet)
+# router.register(r"exercises", views.ExerciseViewSet)
+# router.register(r"exercise-types", views.ExerciseTypeViewSet)
+# router.register(r"exercise-difficulty-levels", views.ExerciseDifficultyLevelViewSet)
+# router.register(r"treatment-plan-templates", views.TreatmentPlanTemplateViewSet)
+# router.register(r"treatment-plan-template-items", views.TreatmentPlanTemplateItemViewSet)
+# router.register(r"treatment-plan-template-practitioners", views.TreatmentPlanTemplatePractitionerViewSet)
+# router.register(r"therapy-plan-templates", views.TherapyPlanTemplateViewSet)
+# router.register(r"therapy-plan-details", views.TherapyPlanDetailViewSet)
+# router.register(r"treatment-counselling", views.TreatmentCounsellingViewSet)
 
 # ════════════════════════════════════════════════════════════════════════════
-# INSURANCE
+# INSURANCE (Disabled for EEU Staff Clinic - 100% Free Staff Coverage)
 # ════════════════════════════════════════════════════════════════════════════
-router.register(r"insurance-payors", views.InsurancePayorViewSet)
-router.register(r"insurance-payor-contracts", views.InsurancePayorContractViewSet)
-router.register(r"patient-insurance-policies", views.PatientInsurancePolicyViewSet)
-router.register(r"insurance-claims", views.InsuranceClaimViewSet)
-router.register(r"insurance-claim-coverages", views.InsuranceClaimCoverageViewSet)
-router.register(r"patient-insurance-coverages", views.PatientInsuranceCoverageViewSet)
-router.register(r"insurance-eligibility-plans", views.InsurancePayorEligibilityPlanViewSet)
-router.register(r"item-insurance-eligibility", views.ItemInsuranceEligibilityViewSet)
+# router.register(r"insurance-payors", views.InsurancePayorViewSet)
+# router.register(r"insurance-payor-contracts", views.InsurancePayorContractViewSet)
+# router.register(r"patient-insurance-policies", views.PatientInsurancePolicyViewSet)
+# router.register(r"insurance-claims", views.InsuranceClaimViewSet)
+# router.register(r"insurance-claim-coverages", views.InsuranceClaimCoverageViewSet)
+# router.register(r"patient-insurance-coverages", views.PatientInsuranceCoverageViewSet)
+# router.register(r"insurance-eligibility-plans", views.InsurancePayorEligibilityPlanViewSet)
+# router.register(r"item-insurance-eligibility", views.ItemInsuranceEligibilityViewSet)
 
 # ════════════════════════════════════════════════════════════════════════════
-# INPATIENT / EMERGENCY / NURSING
+# INPATIENT / EMERGENCY (Disabled for EEU Staff Clinic - Outpatient Only)
 # ════════════════════════════════════════════════════════════════════════════
-router.register(r"inpatient-records", views.InpatientRecordViewSet)
-router.register(r"inpatient-medication-entries", views.InpatientMedicationEntryViewSet)
-router.register(r"inpatient-occupancies", views.InpatientOccupancyViewSet)
-router.register(r"inpatient-medication-orders", views.InpatientMedicationOrderViewSet)
-router.register(r"inpatient-medication-order-entries", views.InpatientMedicationOrderEntryViewSet)
-router.register(r"inpatient-record-items", views.InpatientRecordItemViewSet)
-router.register(r"emergency-records", views.EmergencyRecordViewSet)
-router.register(r"emergency-occupancies", views.EmergencyOccupancyViewSet)
-router.register(r"discharge-summaries", views.DischargeSummaryViewSet)
+# router.register(r"inpatient-records", views.InpatientRecordViewSet)
+# router.register(r"inpatient-medication-entries", views.InpatientMedicationEntryViewSet)
+# router.register(r"inpatient-occupancies", views.InpatientOccupancyViewSet)
+# router.register(r"inpatient-medication-orders", views.InpatientMedicationOrderViewSet)
+# router.register(r"inpatient-medication-order-entries", views.InpatientMedicationOrderEntryViewSet)
+# router.register(r"inpatient-record-items", views.InpatientRecordItemViewSet)
+# router.register(r"emergency-records", views.EmergencyRecordViewSet)
+# router.register(r"emergency-occupancies", views.EmergencyOccupancyViewSet)
+# router.register(r"discharge-summaries", views.DischargeSummaryViewSet)
 router.register(r"nursing-tasks", views.NursingTaskViewSet)
 router.register(r"nursing-checklist-templates", views.NursingChecklistTemplateViewSet)
 
@@ -209,9 +209,9 @@ router.register(r"eeu-pme-campaigns", views.EEUPMECampaignViewSet)
 router.register(r"eeu-toxic-surveillance", views.EEUToxicSurveillanceViewSet)
 
 # ════════════════════════════════════════════════════════════════════════════
-# PAYMENTS
+# PAYMENTS (Disabled for EEU Staff Clinic - 100% Free Staff Healthcare)
 # ════════════════════════════════════════════════════════════════════════════
-router.register(r"payments", views.HealthcarePaymentRecordViewSet)
+# router.register(r"payments", views.HealthcarePaymentRecordViewSet)
 router.register(r"dashboard", views.HealthcareDashboardViewSet, basename="healthcare-dashboard")
 router.register(r"lab-dashboard", views.LabDashboardViewSet, basename="lab-dashboard")
 

@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { getRoleDashboardPath } from "@/utils/rbac";
 import { LoginStateEnum, useLoginStateContext } from "./providers/login-provider";
 
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"form">) {
@@ -36,8 +37,9 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 	const handleFinish = async (values: SignInReq) => {
 		setLoading(true);
 		try {
-			await signIn(values);
-			navigatge(GLOBAL_CONFIG.defaultRoute, { replace: true });
+			const userInfo = await signIn(values);
+			const targetPath = getRoleDashboardPath(userInfo?.roles, userInfo?.is_staff);
+			navigatge(targetPath, { replace: true });
 			toast.success(t("sys.login.loginSuccessTitle"), {
 				closeButton: true,
 			});
@@ -102,7 +104,12 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 								{t("sys.login.rememberMe")}
 							</label>
 						</div>
-						<Button variant="link" onClick={() => setLoginState(LoginStateEnum.RESET_PASSWORD)} size="sm">
+						<Button
+							type="button"
+							variant="link"
+							onClick={() => setLoginState(LoginStateEnum.RESET_PASSWORD)}
+							size="sm"
+						>
 							{t("sys.login.forgetPassword")}
 						</Button>
 					</div>
@@ -114,7 +121,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 					</Button>
 
 					{/* Mobile / QR Code login */}
-					<div className="grid gap-4 sm:grid-cols-2">
+					{/* <div className="grid gap-4 sm:grid-cols-2">
 						<Button variant="outline" className="w-full" onClick={() => setLoginState(LoginStateEnum.MOBILE)}>
 							<Icon icon="uil:mobile-android" size={20} />
 							{t("sys.login.mobileSignInFormTitle")}
@@ -123,10 +130,10 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 							<Icon icon="uil:qrcode-scan" size={20} />
 							{t("sys.login.qrSignInFormTitle")}
 						</Button>
-					</div>
+					</div> */}
 
 					{/* Other login methods */}
-					<div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
+					{/* <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
 						<span className="relative z-10 bg-background px-2 text-muted-foreground">{t("sys.login.otherSignIn")}</span>
 					</div>
 					<div className="flex cursor-pointer justify-around text-2xl">
@@ -139,15 +146,15 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 						<Button variant="ghost" size="icon">
 							<Icon icon="ant-design:google-circle-filled" size={24} />
 						</Button>
-					</div>
+					</div> */}
 
 					{/* Register */}
-					<div className="text-center text-sm">
+					{/* <div className="text-center text-sm">
 						{t("sys.login.noAccount")}
 						<Button variant="link" className="px-1" onClick={() => setLoginState(LoginStateEnum.REGISTER)}>
 							{t("sys.login.signUpFormTitle")}
 						</Button>
-					</div>
+					</div> */}
 				</form>
 			</Form>
 		</div>

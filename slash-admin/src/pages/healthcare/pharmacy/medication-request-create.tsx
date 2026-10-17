@@ -22,6 +22,10 @@ import {
 import EntitySelect, { type EntityOption } from "@/components/healthcare/EntitySelect";
 import Combobox from "@/components/healthcare/Combobox";
 import PrescriptionPrintModal, { type PrintableDrugItem } from "@/pages/healthcare/encounters/PrescriptionPrintModal";
+import {
+  ETHIOPIAN_MEDICINE_OPTIONS,
+  getEthiopianMedicineDefaults,
+} from "./ethiopianMedicinesData";
 
 interface StockItemOption {
   id: number;
@@ -59,7 +63,7 @@ function calculateMarleyAge(birthDateStr?: string | null): string {
     years -= 1;
     months += 12;
   }
-  return `${years} Years(s) ${months} Month(s) ${days} Day(s)`;
+  return `${years} Year(s)`;
 }
 
 // ── Quantity Calculation ────────────────────────────────────────────────────
@@ -414,6 +418,18 @@ export default function MedicationRequestCreatePage() {
     );
 
     if (!med) {
+      const ethMed = getEthiopianMedicineDefaults(name);
+      if (ethMed) {
+        const nextDosage = ethMed.default_dosage || dosage || "1-0-1";
+        const nextPeriod = ethMed.default_period || period || "7 Days";
+        setDosage(nextDosage);
+        setPeriod(nextPeriod);
+        setDosageForm(ethMed.primary_dosage_form || "Tablet");
+        if (ethMed.dosage_form_and_strength && !comment) {
+          setComment(ethMed.dosage_form_and_strength);
+        }
+        setOrderDescription(`${ethMed.generic_name || name} - ${nextDosage} for ${nextPeriod}`);
+      }
       checkStock(name);
       return;
     }
@@ -578,9 +594,10 @@ export default function MedicationRequestCreatePage() {
   }, [practitioners]);
 
   const medicationOptions: string[] = useMemo(() => {
-    return medications
+    const fromApi = medications
       .map((m) => medicationLabel(m))
       .filter((o) => typeof o === "string" && o.trim().length > 0);
+    return Array.from(new Set([...fromApi, ...ETHIOPIAN_MEDICINE_OPTIONS]));
   }, [medications]);
 
   const stockItemOptions: string[] = useMemo(() => {
@@ -1449,10 +1466,23 @@ export default function MedicationRequestCreatePage() {
             }
           }}
           patientId={selectedPatient.patient_id || selectedPatient.id}
+          cardNo={selectedPatient.eeu_staff_id || selectedPatient.patient_id || selectedPatient.uid || String(selectedPatient.id)}
           patientName={selectedPatient.patient_name}
           patientAge={calculateMarleyAge(selectedPatient.dob)}
           patientSex={selectedPatient.sex || selectedPatient.gender}
+          patientWeight={(selectedPatient as any).weight || ""}
+          region={selectedPatient.eeu_region || selectedPatient.state || "Addis Ababa"}
+          town={selectedPatient.city || "Addis Ababa"}
+          woreda={selectedPatient.territory || ""}
+          kebele={selectedPatient.pincode || ""}
+          houseNo={selectedPatient.address || ""}
+          telNo={selectedPatient.mobile || selectedPatient.phone || ""}
+          isInpatient={Boolean(selectedPatient.inpatient_record)}
+          isOutpatient={!Boolean(selectedPatient.inpatient_record)}
+          isEmergency={Boolean(selectedPatient.emergency_record)}
           practitionerName={selectedPractitioner?.practitioner_name}
+          practitionerQualification={selectedPractitioner?.designation || "Medical Officer / Physician"}
+          practitionerRegistration={selectedPractitioner?.practitioner_id || ""}
           departmentName={
             selectedPractitioner?.department_name ||
             (selectedPractitioner?.department ? String(selectedPractitioner.department) : "")

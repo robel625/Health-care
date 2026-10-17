@@ -16,8 +16,10 @@ import {
   type MedicationRequest,
   type Patient,
 } from "@/api/services/healthcareService";
+import { useHealthcareRoles } from "@/utils/permissions";
 
 export default function MedicationRequestsPage() {
+  const { canDispense: canDispenseRole } = useHealthcareRoles();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const patientParam = searchParams.get("patient");
@@ -310,7 +312,7 @@ export default function MedicationRequestsPage() {
 
         return (
           <div className="flex items-center justify-center gap-1.5">
-            {canDispense && (
+            {canDispense && canDispenseRole && (
               <Button
                 size="sm"
                 className={`text-xs gap-1 h-7 px-2.5 rounded-lg shadow-2xs ${
@@ -589,6 +591,14 @@ export default function MedicationRequestsPage() {
         patientAge={(filterPatient as any)?.age || (data[0] as any)?.patient_age || ""}
         patientSex={filterPatient?.gender || (filterPatient as any)?.sex || (data[0] as any)?.patient_gender || ""}
         patientId={patientParam || data[0]?.patient}
+        cardNo={filterPatient?.eeu_staff_id || filterPatient?.patient_id || filterPatient?.uid || String(patientParam || data[0]?.patient || "")}
+        patientWeight={(filterPatient as any)?.weight || ""}
+        region={filterPatient?.eeu_region || filterPatient?.state || "Addis Ababa"}
+        town={filterPatient?.city || "Addis Ababa"}
+        woreda={filterPatient?.territory || ""}
+        kebele={filterPatient?.pincode || ""}
+        houseNo={filterPatient?.address || ""}
+        telNo={filterPatient?.mobile || filterPatient?.phone || ""}
         practitionerName={data[0]?.practitioner_name || "Attending Physician"}
         drugRows={printItems}
       />

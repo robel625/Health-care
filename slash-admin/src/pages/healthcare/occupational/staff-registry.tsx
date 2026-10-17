@@ -23,7 +23,7 @@ export default function EEUStaffRegistryPage() {
   const [beneficiaryFilter, setBeneficiaryFilter] = useState("all");
   const [deptFilter, setDeptFilter] = useState("all");
   const [quotaFilter, setQuotaFilter] = useState("all");
-  const [companyFilter, setCompanyFilter] = useState<"all" | "EEU" | "EEP" | "others">("all");
+  const [companyFilter, setCompanyFilter] = useState<"all" | "EEU" | "EEFC" | "RET" | "others">("all");
 
   // Clinic switcher integration
   const activeClinic = useClinicStore((s) => s.activeClinic);
@@ -134,30 +134,31 @@ export default function EEUStaffRegistryPage() {
     else if (quotaFilter === "moderate") matchesQuota = pct >= 60 && pct < 85;
     else if (quotaFilter === "critical") matchesQuota = pct >= 85;
 
-    // Clinic-level filtering
-    let matchesClinic = true;
-    if (activeClinic.id !== "all" && activeClinic.region !== "National Directorate") {
-      const reg = activeClinic.region.toLowerCase();
-      const ws = (p.eeu_work_station || "").toLowerCase();
-      const addr = (p.address || "").toLowerCase();
-      const cName = activeClinic.name.toLowerCase().replace("regional clinic", "").replace("clinic", "").trim();
-      matchesClinic = ws.includes(reg) || addr.includes(reg) || ws.includes(cName);
-    }
+    // Clinic-level filtering: single clinic for all staff
+    const matchesClinic = true;
 
     // Company affiliation filtering
-    const isEEP = Boolean(
-      (p.company_affiliation || "").includes("EEP") ||
-      (p.eeu_staff_id || "").startsWith("EEP")
+    const isEEFC = Boolean(
+      (p.company_affiliation || "").includes("EEFC") ||
+      (p.company_affiliation || "").includes("Football") ||
+      (p.eeu_staff_id || "").startsWith("EEFC")
     );
-    const isContractor = Boolean(
-      (p.company_affiliation || "").includes("Contractor") ||
+    const isRetired = Boolean(
+      (p.company_affiliation || "").includes("Retired") ||
+      (p.eeu_staff_id || "").startsWith("RET")
+    );
+    const isOthers = Boolean(
       (p.company_affiliation || "").includes("Other") ||
+      (p.company_affiliation || "").includes("Contractor") ||
       (p.eeu_staff_id || "").startsWith("others")
     );
+    const isEEU = !isEEFC && !isRetired && !isOthers;
+
     let matchesCompany = true;
-    if (companyFilter === "EEU") matchesCompany = !isEEP && !isContractor;
-    if (companyFilter === "EEP") matchesCompany = isEEP;
-    if (companyFilter === "others") matchesCompany = isContractor;
+    if (companyFilter === "EEU") matchesCompany = isEEU;
+    if (companyFilter === "EEFC") matchesCompany = isEEFC;
+    if (companyFilter === "RET") matchesCompany = isRetired;
+    if (companyFilter === "others") matchesCompany = isOthers;
 
     return matchesSearch && matchesBen && matchesDept && matchesQuota && matchesClinic && matchesCompany;
   });
@@ -168,10 +169,10 @@ export default function EEUStaffRegistryPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            EEU & EEP Corporate Health Directory
+            EEU Corporate Health Directory
           </h1>
           <p className="text-sm text-muted-foreground">
-            Employee payroll links, ETB medical quota trackers, and occupational cadre records across Ethiopian Electric Utility (EEU) & Ethiopian Electric Power (EEP)
+            Employee payroll links, ETB medical quota trackers, and occupational cadre records across Ethiopian Electric Utility (EEU), EEFC, Retired Employees, and Others
           </p>
         </div>
         <Button
@@ -239,20 +240,33 @@ export default function EEUStaffRegistryPage() {
                 )}
               >
                 <Icon icon="solar:buildings-bold" size={13} className="text-emerald-500" />
-                EEU ({patients.filter((p) => !(p.company_affiliation?.includes("EEP") || p.eeu_staff_id?.startsWith("EEP") || p.company_affiliation?.includes("Contractor") || p.company_affiliation?.includes("Other") || p.eeu_staff_id?.startsWith("others"))).length})
+                EEU ({patients.filter((p) => !(p.company_affiliation?.includes("EEFC") || p.eeu_staff_id?.startsWith("EEFC") || p.company_affiliation?.includes("Retired") || p.eeu_staff_id?.startsWith("RET") || p.company_affiliation?.includes("Other") || p.eeu_staff_id?.startsWith("others"))).length})
               </button>
               <button
                 type="button"
-                onClick={() => setCompanyFilter("EEP")}
+                onClick={() => setCompanyFilter("EEFC")}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer",
-                  companyFilter === "EEP"
-                    ? "bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/30 font-bold shadow-xs"
+                  companyFilter === "EEFC"
+                    ? "bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/30 font-bold shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon icon="solar:bolt-bold" size={13} className="text-sky-500" />
-                EEP ({patients.filter((p) => (p.company_affiliation?.includes("EEP") || p.eeu_staff_id?.startsWith("EEP"))).length})
+                <Icon icon="solar:football-bold" size={13} className="text-blue-500" />
+                EEFC ({patients.filter((p) => (p.company_affiliation?.includes("EEFC") || p.eeu_staff_id?.startsWith("EEFC"))).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCompanyFilter("RET")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer",
+                  companyFilter === "RET"
+                    ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/30 font-bold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon icon="solar:user-heart-bold" size={13} className="text-purple-500" />
+                Retired ({patients.filter((p) => (p.company_affiliation?.includes("Retired") || p.eeu_staff_id?.startsWith("RET"))).length})
               </button>
               <button
                 type="button"
@@ -264,8 +278,8 @@ export default function EEUStaffRegistryPage() {
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon icon="solar:hammer-bold" size={13} className="text-amber-500" />
-                Contractors / Others ({patients.filter((p) => (p.company_affiliation?.includes("Contractor") || p.company_affiliation?.includes("Other") || p.eeu_staff_id?.startsWith("others"))).length})
+                <Icon icon="solar:users-group-two-rounded-bold" size={13} className="text-amber-500" />
+                Others ({patients.filter((p) => (p.company_affiliation?.includes("Other") || p.company_affiliation?.includes("Contractor") || p.eeu_staff_id?.startsWith("others"))).length})
               </button>
             </div>
 
@@ -372,13 +386,18 @@ export default function EEUStaffRegistryPage() {
                         ? "bg-amber-500"
                         : "bg-emerald-500";
 
-                    const isEEP = Boolean(
-                      (p.company_affiliation || "").includes("EEP") ||
-                      (p.eeu_staff_id || "").startsWith("EEP")
+                    const isEEFC = Boolean(
+                      (p.company_affiliation || "").includes("EEFC") ||
+                      (p.company_affiliation || "").includes("Football") ||
+                      (p.eeu_staff_id || "").startsWith("EEFC")
                     );
-                    const isContractor = Boolean(
-                      (p.company_affiliation || "").includes("Contractor") ||
+                    const isRetired = Boolean(
+                      (p.company_affiliation || "").includes("Retired") ||
+                      (p.eeu_staff_id || "").startsWith("RET")
+                    );
+                    const isOthers = Boolean(
                       (p.company_affiliation || "").includes("Other") ||
+                      (p.company_affiliation || "").includes("Contractor") ||
                       (p.eeu_staff_id || "").startsWith("others")
                     );
 
@@ -390,14 +409,16 @@ export default function EEUStaffRegistryPage() {
                               variant="outline"
                               className={cn(
                                 "text-[9px] px-1.5 py-0 font-bold uppercase",
-                                isEEP
-                                  ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                                  : isContractor
+                                isEEFC
+                                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                                  : isRetired
+                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                                  : isOthers
                                   ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
                                   : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                               )}
                             >
-                              {isEEP ? "EEP" : isContractor ? "others" : "EEU"}
+                              {isEEFC ? "EEFC" : isRetired ? "RET" : isOthers ? "Others" : "EEU"}
                             </Badge>
                             <span className="text-primary">{p.eeu_staff_id || p.patient_id}</span>
                           </div>

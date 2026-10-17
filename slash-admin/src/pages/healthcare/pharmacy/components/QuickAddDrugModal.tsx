@@ -10,6 +10,10 @@ import {
   type DosageForm,
   type MedicationClass,
 } from "@/api/services/healthcareService";
+import {
+  ETHIOPIAN_ESSENTIAL_MEDICINES,
+  getEthiopianMedicineDefaults,
+} from "../ethiopianMedicinesData";
 
 interface QuickAddDrugModalProps {
   open: boolean;
@@ -124,12 +128,52 @@ export default function QuickAddDrugModal({
               Generic Name <span className="text-destructive">*</span>
             </Label>
             <Input
+              list="eeml-quick-add-list"
               value={genericName}
-              onChange={(e) => setGenericName(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setGenericName(val);
+                const found = getEthiopianMedicineDefaults(val);
+                if (found) {
+                  if (found.strength) {
+                    const match = found.strength.match(/^(\d+)(.*)$/);
+                    if (match) {
+                      setStrength(match[1]);
+                      if (match[2]) setStrengthUom(match[2].trim());
+                    } else {
+                      setStrength(found.strength);
+                    }
+                  }
+                  if (found.sub_code || found.major_code) {
+                    setNdc(found.sub_code || found.major_code);
+                  }
+                  if (found.primary_dosage_form && dosageForms.length > 0) {
+                    const df = dosageForms.find((d) =>
+                      d.dosage_form.toLowerCase().includes(found.primary_dosage_form.toLowerCase())
+                    );
+                    if (df) setDosageFormId(df.id);
+                  }
+                  if (medClasses.length > 0) {
+                    const mc = medClasses.find(
+                      (c) =>
+                        c.medication_class.toLowerCase().includes(found.major_category.toLowerCase()) ||
+                        found.major_category.toLowerCase().includes(c.medication_class.toLowerCase())
+                    );
+                    if (mc) setMedClassId(mc.id);
+                  }
+                }
+              }}
               placeholder="e.g. Ciprofloxacin HCl / Amoxicillin / Paracetamol"
               className="h-9 text-xs font-semibold"
               autoFocus
             />
+            <datalist id="eeml-quick-add-list">
+              {ETHIOPIAN_ESSENTIAL_MEDICINES.slice(0, 300).map((m) => (
+                <option key={m.id} value={m.generic_name}>
+                  {m.major_category} · {m.strength ? `[${m.strength}]` : ""}
+                </option>
+              ))}
+            </datalist>
           </div>
 
           <div className="space-y-1.5">

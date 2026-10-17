@@ -82,6 +82,14 @@ export default function Combobox({
     ? validOptions.filter((o: string) => o.toLowerCase().includes(needle))
     : validOptions;
 
+  const displayedItems = useMemo(() => {
+    const list = filtered.slice(0, 100);
+    if (value && !list.includes(value) && filtered.includes(value)) {
+      list.unshift(value);
+    }
+    return list;
+  }, [filtered, value]);
+
   const showAdvanced =
     allowAdvancedSearch !== undefined ? allowAdvancedSearch : Boolean(doctype || rawItems);
 
@@ -182,7 +190,7 @@ export default function Combobox({
               )}
               {filtered.length > 0 && (
                 <CommandGroup>
-                  {filtered.map((opt: string, idx: number) => {
+                  {displayedItems.map((opt: string, idx: number) => {
                     const badge = badgeMap?.[opt] || badgeMap?.[opt.toLowerCase()] || badgeMap?.[opt.trim()];
                     return (
                       <CommandItem
@@ -219,6 +227,11 @@ export default function Combobox({
                       </CommandItem>
                     );
                   })}
+                  {filtered.length > 100 && (
+                    <div className="text-[11px] text-muted-foreground text-center py-2 px-3 border-t bg-muted/20 font-medium">
+                      Showing 100 of {filtered.length} options. Type to search all.
+                    </div>
+                  )}
                 </CommandGroup>
               )}
 

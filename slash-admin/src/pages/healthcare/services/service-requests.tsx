@@ -130,9 +130,6 @@ export default function ServiceRequestsPage() {
       case "proc":
         navigate(`/healthcare/clinical-procedures/new?patient=${pid}&service_request=${srid}&procedure=${encodeURIComponent(templateName)}`);
         break;
-      case "therapy":
-        navigate(`/healthcare/therapy?patient=${pid}&service_request=${srid}`);
-        break;
       case "sample":
         navigate(`/healthcare/sample-collections/new?patient=${pid}&service_request=${srid}`);
         break;
@@ -355,7 +352,6 @@ export default function ServiceRequestsPage() {
             <option value="Lab">Laboratory & Pathology</option>
             <option value="Radio">Radiology & Imaging</option>
             <option value="Proc">Clinical Procedure</option>
-            <option value="Therap">Rehab & Therapy</option>
             <option value="Consult">Consultation</option>
           </select>
 
@@ -431,11 +427,6 @@ export default function ServiceRequestsPage() {
               sr.template_dt === "Clinical Procedure Template" ||
               sr.category_name?.toLowerCase().includes("proc") ||
               sr.category_name?.toLowerCase().includes("radio");
-
-            const isTh =
-              sr.reference_doctype === "Therapy Type" ||
-              sr.template_dt === "Therapy Type" ||
-              sr.category_name?.toLowerCase().includes("therap");
 
             const isConsult =
               sr.reference_doctype === "Appointment Type" ||
@@ -554,17 +545,6 @@ export default function ServiceRequestsPage() {
                         >
                           <Icon icon="solar:scalpel-bold" size={11} className="mr-1" />
                           Procedure
-                        </Button>
-                      )}
-                      {isTh && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => handleDownstream(sr, "therapy", e)}
-                          className="h-6 text-[10px] px-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                        >
-                          <Icon icon="solar:dumbbell-small-bold" size={11} className="mr-1" />
-                          Therapy
                         </Button>
                       )}
                       {isConsult && (

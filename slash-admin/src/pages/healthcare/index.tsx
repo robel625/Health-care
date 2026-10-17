@@ -11,9 +11,22 @@ import { HealthcareApi, type HealthcareDashboardAnalytics } from "@/api/services
 import { useDoctypePermissions } from "@/utils/permissions";
 import { formatTime12 } from "@/utils/timeFormat";
 import eeuLogoImg from "@/assets/images/eeu-logo.png";
+import { useUserInfo, useUserRoles } from "@/store/userStore";
+import { getRoleDashboardPath } from "@/utils/rbac";
 
 export default function HealthcareDashboard() {
   const navigate = useNavigate();
+  const user = useUserInfo();
+  const roles = useUserRoles();
+  const isStaff = !!user?.is_staff;
+
+  // Enforce role-based dashboard landing
+  useEffect(() => {
+    const rolePath = getRoleDashboardPath(roles, isStaff);
+    if (rolePath !== "/healthcare") {
+      navigate(rolePath, { replace: true });
+    }
+  }, [roles, isStaff, navigate]);
 
   // Permissions for creation and read access
   const { canCreate: canPatient, canRead: canReadPatient } = useDoctypePermissions("Patient");
@@ -22,11 +35,8 @@ export default function HealthcareDashboard() {
   const { canCreate: canEncounter, canRead: canReadEncounter } = useDoctypePermissions("Patient Encounter");
   const { canCreate: canLabTest, canRead: canReadLabTest } = useDoctypePermissions("Lab Test");
   const { canCreate: canPrescription, canRead: canReadPrescription } = useDoctypePermissions("Drug Prescription");
-  const { canCreate: canInpatient, canRead: canReadInpatient } = useDoctypePermissions("Inpatient Record");
   const { canCreate: canDepartment } = useDoctypePermissions("Medical Department");
   const { canRead: canReadPractitioner } = useDoctypePermissions("Healthcare Practitioner");
-  const { canRead: canReadTherapy } = useDoctypePermissions("Therapy Plan");
-  const { canRead: canReadClaims } = useDoctypePermissions("Insurance Claim");
   const { canCreate: canMedRequest, canRead: canReadMedRequest } = useDoctypePermissions("Medication Request");
   const { canRead: canReadMedication } = useDoctypePermissions("Medication");
 
@@ -43,16 +53,13 @@ export default function HealthcareDashboard() {
       console.warn("Dedicated dashboard analytics fallback:", err);
       // Fallback: fetch individual entity counts
       const [
-        pats, pracs, aptsToday, encs, labs, inp, therapy, claims, medRequests, vitalsData
+        pats, pracs, aptsToday, encs, labs, medRequests, vitalsData
       ] = await Promise.all([
         HealthcareApi.patients.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
         HealthcareApi.practitioners.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
         HealthcareApi.appointments.today().catch(() => []),
         HealthcareApi.encounters.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
         HealthcareApi.labTests.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
-        HealthcareApi.inpatientRecords.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
-        HealthcareApi.therapyPlans.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
-        HealthcareApi.insuranceClaims.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
         HealthcareApi.medicationRequests.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
         HealthcareApi.vitalSigns.list({ page_size: 1 }).catch(() => ({ count: 0, results: [] })),
       ]);
@@ -66,9 +73,9 @@ export default function HealthcareDashboard() {
           appointments_total: 0,
           encounters: encs.count || 0,
           lab_tests: labs.count || 0,
-          inpatients: inp.count || 0,
-          therapy_plans: therapy.count || 0,
-          insurance_claims: claims.count || 0,
+          inpatients: 0,
+          therapy_plans: 0,
+          insurance_claims: 0,
           prescriptions: 0,
           medication_requests: medRequests.count || 0,
           vitals: vitalsData.count || 0,
@@ -137,7 +144,7 @@ export default function HealthcareDashboard() {
     {
       label: "Total Patients",
       value: stats.patients,
-      sublabel: `${stats.inpatients_active || 0} Inpatients`,
+      sublabel: "EEU Staff Registry",
       icon: "solar:users-group-two-rounded-bold-duotone",
       accent: "from-blue-600 to-indigo-600",
       textColor: "text-blue-600 dark:text-blue-400",
@@ -207,18 +214,6 @@ export default function HealthcareDashboard() {
       canRead: canReadVitals,
     },
     {
-      label: "Inpatient Care",
-      value: stats.inpatients,
-      sublabel: "Admissions & Wards",
-      icon: "solar:hospital-bold-duotone",
-      accent: "from-fuchsia-600 to-purple-600",
-      textColor: "text-fuchsia-600 dark:text-fuchsia-400",
-      bgLight: "bg-fuchsia-50 dark:bg-fuchsia-950/40",
-      border: "border-fuchsia-200/60 dark:border-fuchsia-800/40",
-      route: "/healthcare/inpatient",
-      canRead: canReadInpatient,
-    },
-    {
       label: "Medical Practitioners",
       value: stats.practitioners,
       sublabel: "Physicians & Specialists",
@@ -229,30 +224,6 @@ export default function HealthcareDashboard() {
       border: "border-indigo-200/60 dark:border-indigo-800/40",
       route: "/healthcare/practitioners",
       canRead: canReadPractitioner,
-    },
-    {
-      label: "Therapy Plans",
-      value: stats.therapy_plans,
-      sublabel: "Rehab & Sessions",
-      icon: "solar:meditation-bold-duotone",
-      accent: "from-teal-600 to-emerald-600",
-      textColor: "text-teal-600 dark:text-teal-400",
-      bgLight: "bg-teal-50 dark:bg-teal-950/40",
-      border: "border-teal-200/60 dark:border-teal-800/40",
-      route: "/healthcare/therapy",
-      canRead: canReadTherapy,
-    },
-    {
-      label: "Insurance Claims",
-      value: stats.insurance_claims,
-      sublabel: "Payors & Billing",
-      icon: "solar:shield-check-bold-duotone",
-      accent: "from-amber-600 to-yellow-600",
-      textColor: "text-amber-600 dark:text-amber-400",
-      bgLight: "bg-amber-50 dark:bg-amber-950/40",
-      border: "border-amber-200/60 dark:border-amber-800/40",
-      route: "/healthcare/insurance",
-      canRead: canReadClaims,
     },
   ];
 
@@ -269,7 +240,6 @@ export default function HealthcareDashboard() {
     { label: "Prescribe Medication", icon: "solar:pills-bold-duotone", route: "/healthcare/prescriptions", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30", can: canPrescription },
     { label: "Medication Orders", icon: "solar:clipboard-list-bold-duotone", route: "/healthcare/pharmacy/medication-requests", color: "text-teal-600 bg-teal-50 dark:bg-teal-900/30", can: canMedRequest || canReadMedRequest },
     { label: "Pharmacy Console", icon: "solar:pill-bold-duotone", route: "/healthcare/pharmacy", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30", can: canReadMedication },
-    { label: "Inpatient Admit", icon: "solar:hospital-bold-duotone", route: "/healthcare/inpatient", color: "text-rose-600 bg-rose-50 dark:bg-rose-900/30", can: canInpatient },
     { label: "Medical Departments", icon: "solar:building-bold-duotone", route: "/healthcare/departments", color: "text-amber-600 bg-amber-50 dark:bg-amber-900/30", can: canDepartment },
   ].filter((a) => a.can);
 
@@ -394,6 +364,65 @@ export default function HealthcareDashboard() {
         {/* Decorative ambient background blur */}
         <div className="absolute -right-12 -bottom-16 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute left-1/3 -top-12 w-60 h-60 bg-cyan-400/20 rounded-full blur-2xl pointer-events-none" />
+      </div>
+
+      {/* ── Department Specialized Dashboards Bar (Executive Overview) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/healthcare/reception-dashboard")}
+          className="flex items-center gap-3 p-3.5 rounded-xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/70 dark:border-amber-900/40 dark:bg-amber-950/20 dark:hover:bg-amber-950/40 transition-all text-left shadow-sm group"
+        >
+          <div className="h-10 w-10 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            <Icon icon="solar:user-check-bold" size={20} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-amber-900 dark:text-amber-200 truncate">Reception & Access</div>
+            <div className="text-[11px] text-amber-700/80 dark:text-amber-300/70 truncate">Triage & Check-In Queue</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/healthcare/practitioner-dashboard")}
+          className="flex items-center gap-3 p-3.5 rounded-xl border border-purple-200/80 bg-purple-50/50 hover:bg-purple-100/70 dark:border-purple-900/40 dark:bg-purple-950/20 dark:hover:bg-purple-950/40 transition-all text-left shadow-sm group"
+        >
+          <div className="h-10 w-10 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            <Icon icon="solar:stethoscope-bold" size={20} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-purple-900 dark:text-purple-200 truncate">Doctor & Practitioner</div>
+            <div className="text-[11px] text-purple-700/80 dark:text-purple-300/70 truncate">Clinical Consultations & Rx</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/healthcare/lab-dashboard")}
+          className="flex items-center gap-3 p-3.5 rounded-xl border border-sky-200/80 bg-sky-50/50 hover:bg-sky-100/70 dark:border-sky-900/40 dark:bg-sky-950/20 dark:hover:bg-sky-950/40 transition-all text-left shadow-sm group"
+        >
+          <div className="h-10 w-10 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            <Icon icon="solar:test-tube-bold" size={20} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-sky-900 dark:text-sky-200 truncate">Laboratory & Pathology</div>
+            <div className="text-[11px] text-sky-700/80 dark:text-sky-300/70 truncate">Worklist, Accession & Results</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/healthcare/pharmacy")}
+          className="flex items-center gap-3 p-3.5 rounded-xl border border-emerald-200/80 bg-emerald-50/50 hover:bg-emerald-100/70 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 transition-all text-left shadow-sm group"
+        >
+          <div className="h-10 w-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            <Icon icon="solar:pill-bold" size={20} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate">Pharmacy & Formulary</div>
+            <div className="text-[11px] text-emerald-700/80 dark:text-emerald-300/70 truncate">Dispensing & Drug Stock</div>
+          </div>
+        </button>
       </div>
 
       {/* ── KPI Stat Cards ── */}
@@ -567,7 +596,7 @@ export default function HealthcareDashboard() {
                 Clinical Operations Feed
               </h2>
               <p className="text-xs text-muted-foreground">
-                Real-time synchronized data across appointments, encounters, triage vitals, and inpatients
+                Real-time synchronized data across appointments, encounters, triage vitals, and laboratory
               </p>
             </div>
 
@@ -584,10 +613,6 @@ export default function HealthcareDashboard() {
                 <TabsTrigger value="vitals" className="text-xs">
                   <Icon icon="solar:heart-pulse-bold-duotone" size={14} className="mr-1.5" />
                   Vitals Stream ({analytics?.recent_vitals.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="inpatients" className="text-xs">
-                  <Icon icon="solar:hospital-bold-duotone" size={14} className="mr-1.5" />
-                  Inpatients ({analytics?.recent_inpatients.length || 0})
                 </TabsTrigger>
                 <TabsTrigger value="labs" className="text-xs">
                   <Icon icon="solar:test-tube-bold-duotone" size={14} className="mr-1.5" />
@@ -874,68 +899,7 @@ export default function HealthcareDashboard() {
             </div>
           )}
 
-          {/* TAB 4: INPATIENTS */}
-          {activeTab === "inpatients" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Current Inpatient Records ({analytics?.recent_inpatients.length || 0})
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate("/healthcare/inpatient")}
-                  className="h-8 text-xs"
-                >
-                  Inpatient Console
-                </Button>
-              </div>
-
-              {!analytics?.recent_inpatients || analytics.recent_inpatients.length === 0 ? (
-                <p className="text-muted-foreground text-sm py-8 text-center">No active inpatients currently registered</p>
-              ) : (
-                <div className="divide-y rounded-xl border overflow-hidden">
-                  {analytics.recent_inpatients.map((inp) => (
-                    <div
-                      key={inp.id}
-                      onClick={() => navigate("/healthcare/inpatient")}
-                      className="p-3.5 flex items-center justify-between hover:bg-muted/40 cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                          <Icon icon="solar:hospital-bold-duotone" size={20} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-sm text-foreground">{inp.patient_name}</p>
-                            <span className="text-[11px] font-mono text-muted-foreground">{inp.record_id}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Admitted: {inp.admission_date} · Complaint: {inp.chief_complaint}
-                          </p>
-                        </div>
-                      </div>
-
-                      <Badge
-                        variant={
-                          inp.status === "Admitted"
-                            ? "error"
-                            : inp.status === "Discharged"
-                            ? "success"
-                            : "warning"
-                        }
-                        className="text-xs"
-                      >
-                        {inp.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 5: LABS */}
+          {/* TAB 4: LABS */}
           {activeTab === "labs" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">

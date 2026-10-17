@@ -129,9 +129,6 @@ export default function ServiceRequestDetailPage() {
       case "procedure":
         navigate(`/healthcare/clinical-procedures/new?patient=${pid}&service_request=${srid}&procedure=${encodeURIComponent(templateName)}`);
         break;
-      case "therapy":
-        navigate(`/healthcare/therapy?patient=${pid}&service_request=${srid}`);
-        break;
       case "sample":
         navigate(`/healthcare/sample-collections/new?patient=${pid}&service_request=${srid}`);
         break;
@@ -188,11 +185,6 @@ export default function ServiceRequestDetailPage() {
     request.template_dt === "Clinical Procedure Template" ||
     request.category_name?.toLowerCase().includes("proc") ||
     request.category_name?.toLowerCase().includes("radio");
-
-  const isTherapy =
-    request.reference_doctype === "Therapy Type" ||
-    request.template_dt === "Therapy Type" ||
-    request.category_name?.toLowerCase().includes("therap");
 
   const isConsult =
     request.reference_doctype === "Appointment Type" ||
@@ -339,16 +331,7 @@ export default function ServiceRequestDetailPage() {
                 </Button>
               )}
 
-              {isTherapy && (
-                <Button
-                  size="sm"
-                  onClick={() => handleDownstreamAction("therapy")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5 shadow-xs"
-                >
-                  <Icon icon="solar:dumbbell-small-bold" size={14} />
-                  Therapy Session
-                </Button>
-              )}
+
 
               {isConsult && (
                 <Button

@@ -76,8 +76,8 @@ def on_encounter_submit(encounter):
     # 3. Create Medication Requests from drug prescriptions
     _create_medication_requests(encounter, created_requests)
 
-    # 4. Create Therapy Plan from therapy prescriptions
-    _create_therapy_plan(encounter, created_requests)
+    # 4. Therapy Plans disabled for EEU staff clinic (referrals used instead)
+    # _create_therapy_plan(encounter, created_requests)
 
     # 5. Log patient medical record
     _log_encounter_medical_record(encounter)
@@ -85,8 +85,8 @@ def on_encounter_submit(encounter):
     # 6. Close the linked appointment
     _close_linked_appointment(encounter)
 
-    # 7. Create Fee Validity for follow-up visits
-    _create_fee_validity(encounter)
+    # 7. Fee Validity disabled (EEU clinic is 100% free of charge for employees)
+    # _create_fee_validity(encounter)
 
     # 8. Dispatch Celery task for lab order notifications (realtime & in-app)
     if created_requests.get("service_requests"):
@@ -298,13 +298,8 @@ def _create_medication_requests(encounter, created_requests):
 # ── Therapy Plan Creation ─────────────────────────────────────────────
 
 def _create_therapy_plan(encounter, created_requests):
-    """
-    Create a Therapy Plan and its sessions from the encounter's therapy rows.
-
-    Marley records therapies on the encounter's `therapies` child table and only
-    creates the Therapy Plan on submit, so we look for the `TherapyPlanDetail`
-    rows this encounter owns that aren't attached to a plan yet.
-    """
+    """Disabled for EEU clinic - patients requiring therapy/rehab are referred out."""
+    return
     from .models import TherapyPlan, TherapySession, TherapyPlanDetail
 
     therapy_details = list(
@@ -406,11 +401,8 @@ def _close_linked_appointment(encounter):
 # ── Fee Validity ──────────────────────────────────────────────────────
 
 def _create_fee_validity(encounter):
-    """
-    Create Fee Validity record after encounter.
-    In Marley, this allows the patient to return for a free follow-up visit
-    within the validity period.
-    """
+    """Disabled for EEU clinic - all consultations and medications are 100% free for staff."""
+    return
     from .models import FeeValidity, HealthcareSettings
 
     if not encounter.practitioner:

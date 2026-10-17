@@ -4,7 +4,8 @@ import { Button } from "@/ui/button";
 import { Label } from "@/ui/label";
 import { Icon } from "@/components/icon";
 import { HealthcareApi, type TreatmentPlanTemplate } from "@/api/services/healthcareService";
-import type { DrugRow, LabRow, ProcedureRow, TherapyRow } from "./encounterRows";
+import { getDosageFormAndStrength } from "../pharmacy/ethiopianMedicinesData";
+import type { DrugRow, LabRow, ProcedureRow } from "./encounterRows";
 
 interface ApplyTreatmentPlanDialogProps {
   open: boolean;
@@ -13,7 +14,7 @@ interface ApplyTreatmentPlanDialogProps {
     drugs: DrugRow[];
     labs: LabRow[];
     procedures: ProcedureRow[];
-    therapies: TherapyRow[];
+    therapies?: any[];
     symptoms: string[];
     diagnoses: string[];
   }) => void;
@@ -55,7 +56,6 @@ export default function ApplyTreatmentPlanDialog({
       const drugs: DrugRow[] = [];
       const labs: LabRow[] = [];
       const procedures: ProcedureRow[] = [];
-      const therapies: TherapyRow[] = [];
       const symptoms: string[] = [];
       const diagnoses: string[] = [];
 
@@ -75,17 +75,7 @@ export default function ApplyTreatmentPlanDialog({
         }
       }
 
-      // Process top-level therapy type if specified
-      if (tpl.therapy_type_name) {
-        therapies.push({
-          therapy_type: tpl.therapy_type_name,
-          no_of_sessions: String(tpl.total_sessions || 1),
-          interval: "",
-          patient_care_type: "",
-          intent: "",
-          priority: "",
-        });
-      }
+
 
       // Process template items
       if (Array.isArray(tpl.items)) {
@@ -99,7 +89,7 @@ export default function ApplyTreatmentPlanDialog({
               dosage: item.dosage || "",
               period: item.period || "",
               dosage_form: item.dosage_form || "",
-              comment: item.instructions || "",
+              comment: item.instructions || getDosageFormAndStrength(item.drug_name || item.item_name || "") || "",
               interval: item.interval ? String(item.interval) : "",
               interval_uom: item.interval_uom || "",
               number_of_repeats_allowed: item.number_of_repeats_allowed
@@ -132,15 +122,6 @@ export default function ApplyTreatmentPlanDialog({
               intent: "",
               priority: "",
             });
-          } else if (type.includes("therapy")) {
-            therapies.push({
-              therapy_type: item.item_name || "",
-              no_of_sessions: item.quantity ? String(item.quantity) : "1",
-              interval: item.interval ? String(item.interval) : "",
-              patient_care_type: "",
-              intent: "",
-              priority: "",
-            });
           }
         }
       }
@@ -167,7 +148,7 @@ export default function ApplyTreatmentPlanDialog({
         }
       }
 
-      onApply({ drugs, labs, procedures, therapies, symptoms, diagnoses });
+      onApply({ drugs, labs, procedures, therapies: [], symptoms, diagnoses });
       onOpenChange(false);
     } catch (err) {
       console.error("Error applying treatment plan template:", err);
@@ -188,8 +169,8 @@ export default function ApplyTreatmentPlanDialog({
 
         <div className="space-y-4 py-3">
           <p className="text-xs text-muted-foreground">
-            Applying a template automatically unrolls its standard medications, lab investigations,
-            procedures, and therapy sessions into this patient encounter.
+            Applying a template automatically unrolls its standard medications and lab investigations
+            into this patient encounter.
           </p>
 
           <div>

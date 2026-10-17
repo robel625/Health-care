@@ -14,6 +14,8 @@ import {
   type HealthcarePractitioner,
 } from "@/api/services/healthcareService";
 import { formatAge } from "@/utils/age";
+import { printElementIsolated } from "@/utils/printElement";
+import LeaveOrTransferSlipSheet from "./LeaveOrTransferSlipSheet";
 
 const QUICK_DURATIONS = [
   { label: "1 Day", days: 1 },
@@ -38,6 +40,12 @@ export default function MedicalLeaveCreatePage() {
   const [saving, setSaving] = useState(false);
   const [slipId, setSlipId] = useState<string>("");
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [isBlankPad, setIsBlankPad] = useState(false);
+  const [isEditable, setIsEditable] = useState(false);
+  const [paperFormat, setPaperFormat] = useState<"A5" | "A4">("A5");
+  const [showLogo, setShowLogo] = useState(true);
+  const [showOfficialSeal, setShowOfficialSeal] = useState(false);
+  const [isCompact, setIsCompact] = useState(false);
 
   // Masters & Context
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -55,7 +63,7 @@ export default function MedicalLeaveCreatePage() {
 
   const [patientDetails, setPatientDetails] = useState<Patient | null>(null);
   const [practitionerDetails, setPractitionerDetails] = useState<HealthcarePractitioner | null>(null);
-  const [companyName, setCompanyName] = useState("Healthcare Center & Hospital");
+  const [companyName, setCompanyName] = useState("Ethiopian Electric Utility Medium Clinic");
   const [departmentName, setDepartmentName] = useState("Outpatient Department");
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -68,6 +76,9 @@ export default function MedicalLeaveCreatePage() {
     from_date: todayStr,
     to_date: tomorrowStr,
     total_days: 2,
+    treatment_given: "Symptomatic pharmacotherapy and supportive care",
+    advise_to_patient: "Strict bed rest, adequate hydration, medication compliance, return if condition worsens.",
+    recommendations: `Granted 2 days medical leave from ${todayStr} to ${tomorrowStr}.\nExpected to resume normal duties on ${dayAfterTomorrowStr}.`,
     doctor_remarks: "Strict bed rest and symptomatic medication compliance recommended.",
     fitness_state: "Unfit for Work / School" as
       | "Unfit for Work / School"
@@ -83,6 +94,7 @@ export default function MedicalLeaveCreatePage() {
     const to = new Date(from.getTime() + (days - 1) * 86400000);
     const nextFit = new Date(to.getTime() + 86400000);
 
+    const fromStr = form.from_date || todayStr;
     const toStr = to.toISOString().split("T")[0];
     const fitStr = nextFit.toISOString().split("T")[0];
 
@@ -91,6 +103,7 @@ export default function MedicalLeaveCreatePage() {
       to_date: toStr,
       total_days: days,
       fit_to_work_date: fitStr,
+      recommendations: `Granted ${days} day(s) medical leave from ${fromStr} to ${toStr}.\nExpected to resume normal duties on ${fitStr}.`,
     }));
   };
 
@@ -114,6 +127,7 @@ export default function MedicalLeaveCreatePage() {
       to_date: to,
       total_days: days,
       fit_to_work_date: nextFitDate,
+      recommendations: `Granted ${days} day(s) medical leave from ${from} to ${to}.\nExpected to resume normal duties on ${nextFitDate}.`,
     }));
   };
 
@@ -138,7 +152,39 @@ export default function MedicalLeaveCreatePage() {
         setCompanyName(compsList[0].company_name);
       }
 
-      // If encounterParam is present, pre-fill patient and diagnosis from the encounter
+      // 1. Read live encounter context from sessionStorage
+      let sessionCtx: any = null;
+      try {
+        const raw = sessionStorage.getItem("active_encounter_context");
+        if (raw) sessionCtx = JSON.parse(raw);
+      } catch (e) {
+        console.warn("Failed to parse active_encounter_context for leave slip", e);
+      }
+
+      let diagnoses: string[] = [];
+      let symptoms: string[] = [];
+      let medications: string[] = [];
+      let procedures: string[] = [];
+      let comment = "";
+
+      if (sessionCtx) {
+        if (sessionCtx.patientId && !patientParam) {
+          setSelectedPatientId(sessionCtx.patientId);
+        }
+        if (sessionCtx.practitionerId && !practitionerParam) {
+          setSelectedPractitionerId(sessionCtx.practitionerId);
+        }
+        if (sessionCtx.departmentName) {
+          setDepartmentName(sessionCtx.departmentName);
+        }
+        if (sessionCtx.diagnoses?.length) diagnoses = [...sessionCtx.diagnoses];
+        if (sessionCtx.symptoms?.length) symptoms = [...sessionCtx.symptoms];
+        if (sessionCtx.medications?.length) medications = [...sessionCtx.medications];
+        if (sessionCtx.procedures?.length) procedures = [...sessionCtx.procedures];
+        if (sessionCtx.comment) comment = sessionCtx.comment;
+      }
+
+      // 2. If encounterParam is present, fetch encounter from API and merge
       if (encounterParam) {
         try {
           const encId = Number(encounterParam);
@@ -159,18 +205,65 @@ export default function MedicalLeaveCreatePage() {
               if (comp) setCompanyName(comp.company_name);
             }
 
-            const diagnoses = (enc.diagnoses_list || []).map((d: any) => d.diagnosis).filter(Boolean);
-            if (diagnoses.length > 0) {
-              setForm((prev) => ({
-                ...prev,
-                diagnosis: prev.diagnosis || diagnoses.join("; "),
-              }));
-            }
+            const encDiags = (enc.diagnoses_list || []).map((d: any) => d.diagnosis || d.diagnosis_name).filter(Boolean);
+            const encSyms = (enc.symptoms_list_items || []).map((s: any) => s.symptom || s.symptom_name).filter(Boolean);
+            const encMeds = (enc.drug_prescription_items || [])
+              .map((d: any) => `${d.drug_name || d.medication || ""} ${d.dosage || ""} ${d.period || ""}`.trim())
+              .filter(Boolean);
+            const encProcs = (enc.procedure_prescription_items || [])
+              .map((p: any) => `${p.procedure_name || p.procedure || ""}${p.comments ? ` (${p.comments})` : ""}`.trim())
+              .filter(Boolean);
+
+            diagnoses = Array.from(new Set([...diagnoses, ...encDiags]));
+            symptoms = Array.from(new Set([...symptoms, ...encSyms]));
+            medications = Array.from(new Set([...medications, ...encMeds]));
+            procedures = Array.from(new Set([...procedures, ...encProcs]));
+            if (!comment && enc.encounter_comment) comment = enc.encounter_comment;
           }
         } catch (encErr) {
           console.error("Failed to load encounter context for leave slip", encErr);
         }
       }
+
+      // Formulate Diagnosis
+      let diagText = "";
+      if (diagnoses.length > 0) {
+        diagText = diagnoses.join("; ");
+      } else if (symptoms.length > 0) {
+        diagText = `Acute symptomatic presentation: ${symptoms.join(", ")}`;
+      }
+
+      // Formulate Treatment Given
+      let treatmentText = "";
+      if (medications.length > 0 && procedures.length > 0) {
+        treatmentText = `Prescribed: ${medications.join(", ")}; Procedures: ${procedures.join(", ")}`;
+      } else if (medications.length > 0) {
+        treatmentText = `Prescribed medications: ${medications.join(", ")}`;
+      } else if (procedures.length > 0) {
+        treatmentText = `Procedures performed: ${procedures.join(", ")}`;
+      } else {
+        treatmentText = "Symptomatic pharmacotherapy and supportive clinical care";
+      }
+
+      // Formulate Advice to Patient
+      let adviseText = "";
+      if (comment) {
+        adviseText = `Strict bed rest, adequate hydration, strict adherence to medication. ${comment}. Return if symptoms worsen.`;
+      } else {
+        adviseText = "Strict bed rest, adequate hydration, medication compliance, return if condition worsens.";
+      }
+
+      // Formulate Recommendations
+      const recoText = `Granted 2 days medical leave from ${todayStr} to ${tomorrowStr}${diagText ? ` for clinical recovery from ${diagText}` : ""}.\nExpected to resume normal duties on ${dayAfterTomorrowStr}.`;
+
+      setForm((prev) => ({
+        ...prev,
+        diagnosis: prev.diagnosis || diagText,
+        treatment_given: prev.treatment_given !== "Symptomatic pharmacotherapy and supportive care" ? prev.treatment_given : treatmentText,
+        advise_to_patient: prev.advise_to_patient !== "Strict bed rest, adequate hydration, medication compliance, return if condition worsens." ? prev.advise_to_patient : adviseText,
+        recommendations: prev.recommendations.startsWith("Granted 2 days medical leave") ? recoText : prev.recommendations,
+        doctor_remarks: comment ? `${comment}. Certified unfit for duty during stated rest interval.` : prev.doctor_remarks,
+      }));
     } catch (err) {
       console.error("Failed to load leave slip masters", err);
     } finally {
@@ -269,7 +362,7 @@ export default function MedicalLeaveCreatePage() {
       if (andPrint) {
         setActiveView("preview");
         setTimeout(() => {
-          window.print();
+          handlePrintSlip();
         }, 350);
       } else {
         setActiveView("preview");
@@ -299,6 +392,26 @@ export default function MedicalLeaveCreatePage() {
       window.open(`/api/healthcare/medical-leave-slips/${savedId}/print-html/?format=html`, "_blank");
     }
   };
+
+  const handlePrintSlip = () => {
+    printElementIsolated("medical-leave-print-area", {
+      title: `EEU_Leave_Slip_${patientDetails?.patient_name || selectedPatientId || "Sheet"}`,
+      paperFormat,
+    });
+  };
+
+  // Keyboard shortcut Ctrl+P / Cmd+P listener
+  useEffect(() => {
+    if (activeView !== "preview") return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handlePrintSlip();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeView, paperFormat, patientDetails, selectedPatientId]);
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20">
@@ -399,7 +512,7 @@ export default function MedicalLeaveCreatePage() {
             ) : (
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={handlePrintSlip}
                 className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8 shadow-xs"
               >
                 <Icon icon="solar:printer-bold" size={14} className="mr-1.5" />
@@ -592,7 +705,7 @@ export default function MedicalLeaveCreatePage() {
                 {/* Diagnosis */}
                 <div className="space-y-1.5">
                   <Label htmlFor="diagnosis" className="text-xs font-semibold text-slate-700">
-                    Clinical Diagnosis / Medical Reason <span className="text-red-500">*</span>
+                    DIAGNOSIS <span className="text-red-500">*</span>
                   </Label>
                   <Textarea
                     id="diagnosis"
@@ -600,6 +713,51 @@ export default function MedicalLeaveCreatePage() {
                     placeholder="Clinical diagnosis justifying leave (e.g. Acute upper respiratory infection, Gastroenteritis, Post-operative recovery)..."
                     value={form.diagnosis}
                     onChange={(e) => setForm({ ...form, diagnosis: e.target.value })}
+                    className="text-sm font-medium"
+                  />
+                </div>
+
+                {/* Treatment Given */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="treatment_given" className="text-xs font-semibold text-slate-700">
+                    TREATMENT GIVEN
+                  </Label>
+                  <Textarea
+                    id="treatment_given"
+                    rows={2}
+                    placeholder="e.g. Paracetamol 1g PO stat, Amoxicillin 500mg TDS x 5 days, ORS..."
+                    value={form.treatment_given}
+                    onChange={(e) => setForm({ ...form, treatment_given: e.target.value })}
+                    className="text-sm font-medium"
+                  />
+                </div>
+
+                {/* Advise to Patient */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="advise_to_patient" className="text-xs font-semibold text-slate-700">
+                    ADVISE TO PATIENT
+                  </Label>
+                  <Textarea
+                    id="advise_to_patient"
+                    rows={2}
+                    placeholder="e.g. Strict bed rest, adequate hydration, medication compliance, return if condition worsens..."
+                    value={form.advise_to_patient}
+                    onChange={(e) => setForm({ ...form, advise_to_patient: e.target.value })}
+                    className="text-sm font-medium"
+                  />
+                </div>
+
+                {/* Recommendations */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="recommendations" className="text-xs font-semibold text-slate-700">
+                    RECOMMENDATIONS (Leave or Transfer Details)
+                  </Label>
+                  <Textarea
+                    id="recommendations"
+                    rows={3}
+                    placeholder="e.g. Granted 3 days sick leave from ... to ... or Transfer to specialized center..."
+                    value={form.recommendations}
+                    onChange={(e) => setForm({ ...form, recommendations: e.target.value })}
                     className="text-sm font-medium"
                   />
                 </div>
@@ -720,149 +878,146 @@ export default function MedicalLeaveCreatePage() {
         )}
 
         {/* ══════════════════════════════════════════════════════════════ */}
-        {/* VIEW 2: Standardized A5 Printable Certificate Format          */}
+        {/* VIEW 2: Physical Leave or Transfer Slip Replica (Photo Match) */}
         {/* ══════════════════════════════════════════════════════════════ */}
-        <div
-          id="medical-leave-print-area"
-          className={`${
-            activeView === "preview" ? "block" : "hidden print:block"
-          } bg-white text-slate-900 p-8 border rounded-xl shadow-xs print:border-none print:shadow-none print:p-0 print:m-0`}
-          style={{ maxWidth: "148mm", margin: "0 auto" }}
-        >
-          {/* Certificate Header */}
-          <div className="border-b-2 border-slate-900 pb-3 mb-4 text-center">
-            <h2 className="text-base font-extrabold uppercase tracking-tight text-slate-900">
-              {companyName}
-            </h2>
-            <p className="text-[10px] text-slate-600">
-              Medical Services & Occupational Health Department
-            </p>
-            <p className="text-[9px] text-slate-500">
-              General Hospital Way • Tel: +251-11-000-0000 • Addis Ababa
-            </p>
-
-            <div className="mt-2.5">
-              <span className="inline-block bg-slate-900 text-white font-extrabold text-[11px] px-4 py-0.5 rounded tracking-widest uppercase">
-                Medical Leave / Sick Leave Certificate
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center text-[10px] text-slate-600 mt-2 px-1">
-              <span>
-                <strong>Cert No:</strong> {slipId || `MLS-${new Date().getFullYear()}-0001`}
-              </span>
-              <span>
-                <strong>Issue Date:</strong> {form.issue_date}
-              </span>
-            </div>
-          </div>
-
-          {/* Certification Statement */}
-          <p className="text-xs leading-relaxed text-slate-800 text-justify mb-3">
-            This is to certify that{" "}
-            <strong className="text-slate-950 underline decoration-slate-400 font-bold">
-              {patientName}
-            </strong>
-            , MRN / ID: <strong>#{selectedPatientId || "N/A"}</strong>, Age: <strong>{patientAge}</strong>,
-            Gender: <strong>{patientSex}</strong>, was clinically examined and treated at this facility and is
-            medically advised to observe the following prescribed rest period:
-          </p>
-
-          {/* Clinical Diagnosis Box */}
-          <div className="bg-slate-50 border border-slate-300 rounded p-2.5 mb-3 text-xs">
-            <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block mb-0.5">
-              Clinical Diagnosis / Medical Condition
-            </span>
-            <div className="font-bold text-slate-900 text-[12px] leading-snug">
-              {form.diagnosis || "Medical condition requiring rest and clinical follow-up."}
-            </div>
-          </div>
-
-          {/* Recommended Rest Period (High Prominence) */}
-          <div className="bg-teal-50/70 border-2 border-teal-600 rounded p-3 mb-3 text-center">
-            <div className="text-[10px] font-extrabold text-teal-900 uppercase tracking-wider mb-1">
-              Recommended Medical Leave Period
-            </div>
-            <div className="flex items-center justify-around py-1">
-              <div>
-                <span className="text-[9px] text-teal-800 uppercase block font-semibold">Commencing</span>
-                <span className="text-xs font-extrabold text-slate-900">{form.from_date}</span>
-              </div>
-              <div className="text-teal-600 font-bold text-base">➔</div>
-              <div>
-                <span className="text-[9px] text-teal-800 uppercase block font-semibold">Concluding</span>
-                <span className="text-xs font-extrabold text-slate-900">{form.to_date}</span>
-              </div>
-              <div>
-                <span className="text-[9px] text-teal-800 uppercase block font-semibold">Total Duration</span>
-                <span className="inline-block bg-teal-700 text-white font-extrabold text-xs px-2.5 py-0.5 rounded">
-                  {form.total_days} Day{form.total_days > 1 ? "s" : ""}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Fitness & Remarks */}
-          <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-            <div className="border border-slate-200 rounded p-2 bg-slate-50">
-              <span className="text-[9px] font-bold text-slate-500 uppercase block">Fitness Status</span>
-              <span
-                className={`font-bold text-xs ${
-                  form.fitness_state === "Fit for Normal Duties" ? "text-green-700" : "text-red-700"
-                }`}
-              >
-                {form.fitness_state}
-              </span>
-              <div className="text-[10px] text-slate-600 mt-1">
-                Expected Fit Date: <strong>{form.fit_to_work_date || "Upon rest end"}</strong>
-              </div>
-            </div>
-
-            <div className="border border-slate-200 rounded p-2 bg-slate-50">
-              <span className="text-[9px] font-bold text-slate-500 uppercase block">Doctor's Remarks</span>
-              <div className="text-[11px] text-slate-700 leading-snug">
-                {form.doctor_remarks || "Strict bed rest and compliance recommended."}
-              </div>
-            </div>
-          </div>
-
-          {/* Signature & Stamp Section */}
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-300 text-xs mt-3">
-            <div className="text-center">
-              <div className="mt-7 border-t border-slate-800 pt-1">
-                <div className="font-bold text-slate-900">Dr. {practitionerName}</div>
-                <div className="text-[10px] text-slate-600">{practitionerDesignation}</div>
-                <div className="text-[9px] text-slate-500">Medical Council Reg. Verified</div>
-              </div>
-            </div>
-
-            <div>
-              <div className="border border-dashed border-slate-400 rounded h-14 flex items-center justify-center text-[9px] font-semibold text-slate-400 uppercase text-center px-2">
-                [ Official Clinic / Hospital Seal ]
-              </div>
-            </div>
-          </div>
-
-          {/* Disclaimer */}
-          <div className="mt-3 pt-2 border-t border-dotted border-slate-300 text-[8px] text-slate-400 text-center leading-tight">
-            NOTICE TO EMPLOYER / SCHOOL: Issued for official sick leave certification. Alterations, erasures, or
-            corrections render this document invalid.
-          </div>
+        <div className={`${activeView === "preview" ? "block" : "hidden print:block"} p-4 sm:p-6`}>
+          <LeaveOrTransferSlipSheet
+            employeeName={patientDetails?.patient_name || (selectedPatientId ? `Patient #${selectedPatientId}` : "")}
+            age={patientDetails ? formatAge(patientDetails.dob) || patientDetails.age : ""}
+            sex={patientDetails?.sex || (patientDetails as any)?.gender || ""}
+            cardNo={
+              patientDetails?.eeu_staff_id ||
+              patientDetails?.patient_id ||
+              patientDetails?.uid ||
+              (selectedPatientId ? String(selectedPatientId) : "")
+            }
+            date={form.issue_date}
+            diagnosis={form.diagnosis}
+            treatmentGiven={form.treatment_given}
+            adviseToPatient={form.advise_to_patient}
+            recommendations={form.recommendations}
+            physicianName={
+              practitionerDetails?.practitioner_name
+                ? practitionerDetails.practitioner_name.startsWith("Dr.")
+                  ? practitionerDetails.practitioner_name
+                  : `Dr. ${practitionerDetails.practitioner_name}`
+                : ""
+            }
+            clinicName="MEDIUM CLINIC"
+            clinicPhone="+251115157103"
+            paperFormat={paperFormat}
+            showLogo={showLogo}
+            showOfficialSeal={showOfficialSeal}
+            isCompact={isCompact}
+            isBlankPad={isBlankPad}
+            isEditable={isEditable}
+            onFieldChange={(field: string, val: string) => {
+              if (field === "diagnosis") setForm((p) => ({ ...p, diagnosis: val }));
+              else if (field === "treatmentGiven") setForm((p) => ({ ...p, treatment_given: val }));
+              else if (field === "adviseToPatient") setForm((p) => ({ ...p, advise_to_patient: val }));
+              else if (field === "recommendations") setForm((p) => ({ ...p, recommendations: val }));
+              else if (field === "date") setForm((p) => ({ ...p, issue_date: val }));
+            }}
+          />
         </div>
 
         {/* Print Action Bar (when in preview view) */}
         {activeView === "preview" && (
-          <div className="mt-6 p-4 bg-white border rounded-xl flex justify-between items-center print:hidden shadow-xs">
+          <div className="mt-6 p-4 bg-white border rounded-xl flex flex-wrap justify-between items-center gap-3 print:hidden shadow-xs">
             <Button variant="outline" size="sm" onClick={() => setActiveView("form")}>
               <Icon icon="solar:pen-bold" size={14} className="mr-1.5" /> Back to Edit Form
             </Button>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Paper Format Selector: A5 vs A4 */}
+              <div className="flex rounded-md border border-slate-300 p-0.5 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setPaperFormat("A5")}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                    paperFormat === "A5"
+                      ? "bg-teal-700 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  A5 Pad
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaperFormat("A4")}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                    paperFormat === "A4"
+                      ? "bg-teal-700 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  A4 Sheet
+                </button>
+              </div>
+
+              {/* Pre-printed stationery toggle */}
+              <Button
+                variant={showLogo ? "outline" : "secondary"}
+                size="sm"
+                onClick={() => setShowLogo(!showLogo)}
+                className="text-xs h-8 gap-1"
+                title="Toggle logo and heading for clinics with pre-printed stationery"
+              >
+                <Icon icon="solar:gallery-bold" size={13} />
+                {showLogo ? "Hide Header Logo" : "Show Header Logo"}
+              </Button>
+
+              {/* Official Clinic Stamp toggle */}
+              <Button
+                variant={showOfficialSeal ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowOfficialSeal(!showOfficialSeal)}
+                className={`text-xs h-8 gap-1 ${
+                  showOfficialSeal ? "bg-indigo-700 hover:bg-indigo-800 text-white" : ""
+                }`}
+              >
+                <Icon icon="solar:verified-check-bold" size={13} />
+                {showOfficialSeal ? "Official Stamp: ON" : "+ Clinic Stamp"}
+              </Button>
+
+              {/* Compact Spacing toggle */}
+              <Button
+                variant={isCompact ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setIsCompact(!isCompact)}
+                className="text-xs h-8 gap-1"
+              >
+                <Icon icon="solar:minimize-square-bold" size={13} />
+                {isCompact ? "Compact Fit" : "Normal Spacing"}
+              </Button>
+
+              {/* Live In-line Edit toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditable(!isEditable)}
+                className="text-xs h-8 gap-1"
+              >
+                <Icon icon={isEditable ? "solar:eye-bold" : "solar:pen-bold"} size={13} />
+                {isEditable ? "Lock Preview" : "Edit Details"}
+              </Button>
+
+              {/* Blank Pad toggle */}
+              <Button
+                variant={isBlankPad ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsBlankPad(!isBlankPad)}
+                className="text-xs h-8 gap-1"
+              >
+                <Icon icon="solar:document-bold" size={13} />
+                {isBlankPad ? "Show Filled Data" : "Blank Pad"}
+              </Button>
+
               {savedId && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleOpenServerTemplate}
-                  className="text-teal-700"
+                  className="text-emerald-700"
                 >
                   <Icon icon="solar:link-circle-bold" size={15} className="mr-1.5" />
                   Open Pure HTML
@@ -873,11 +1028,11 @@ export default function MedicalLeaveCreatePage() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => window.print()}
-                className="bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={handlePrintSlip}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
               >
                 <Icon icon="solar:printer-bold" size={16} className="mr-1.5" />
-                Print A5 Certificate
+                Print Leave or Transfer Slip
               </Button>
             </div>
           </div>

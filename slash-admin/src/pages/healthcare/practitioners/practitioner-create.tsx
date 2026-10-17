@@ -87,12 +87,8 @@ const CLINICAL_TEMPLATES = [
       mobile_phone: "+1 (555) 234-8901",
       email: "sarah.chen@metropolitan.org",
       hospital: "Metropolitan Heart & Vascular Center",
-      employee: "EMP-CARD-042",
-      op_consulting_charge: 160,
-      inpatient_visit_charge: 240,
-      enable_free_follow_ups: true,
-      valid_days: 7,
-      max_visits: 1,
+      employee: "EEU-CARD-042",
+      eeu_staff_id: "EEU-CARD-042",
       image: "https://images.unsplash.com/photo-1594824813673-455b85a30554?auto=format&fit=crop&q=80&w=256",
       bio: "Board-certified cardiologist specializing in adult echocardiography, non-invasive imaging, and preventative cardiac care.",
       subspecialties: ["Echocardiography", "Preventative Care", "Hypertension"],
@@ -122,12 +118,8 @@ const CLINICAL_TEMPLATES = [
       mobile_phone: "+1 (555) 432-1098",
       email: "marcus.vance@metropolitan.org",
       hospital: "Children's Health Pavilion",
-      employee: "EMP-PED-018",
-      op_consulting_charge: 95,
-      inpatient_visit_charge: 140,
-      enable_free_follow_ups: true,
-      valid_days: 10,
-      max_visits: 2,
+      employee: "EEU-PED-018",
+      eeu_staff_id: "EEU-PED-018",
       image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=256",
       bio: "Fellow of the American Academy of Pediatrics with 12+ years providing compassionate pediatric outpatient and neonatology care.",
       subspecialties: ["Neonatal Care", "Adolescent Medicine", "Immunizations"],
@@ -157,12 +149,8 @@ const CLINICAL_TEMPLATES = [
       mobile_phone: "+1 (555) 789-3456",
       email: "elena.rostova@metropolitan.org",
       hospital: "Metropolitan Surgical Institute",
-      employee: "EMP-SURG-099",
-      op_consulting_charge: 190,
-      inpatient_visit_charge: 300,
-      enable_free_follow_ups: true,
-      valid_days: 14,
-      max_visits: 1,
+      employee: "EEU-SURG-099",
+      eeu_staff_id: "EEU-SURG-099",
       image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=256",
       bio: "Specializing in advanced laparoscopic surgery, oncology resections, and emergency surgical intervention with over 1,500 procedures completed.",
       subspecialties: ["Laparoscopic Surgery", "Oncology Surgery", "Trauma"],
@@ -186,18 +174,14 @@ const CLINICAL_TEMPLATES = [
       last_name: "Sterling",
       gender: "Male",
       status: "Active",
-      practitioner_type: "External",
+      practitioner_type: "Internal",
       designation: "Professor of Clinical Neurology",
       deptKeyword: "neuro",
       mobile_phone: "+1 (555) 890-1234",
       email: "julian.sterling@neuro-institute.org",
       hospital: "Neuroscience Institute & Research Hospital",
-      employee: "VISIT-NEURO-007",
-      op_consulting_charge: 220,
-      inpatient_visit_charge: 350,
-      enable_free_follow_ups: false,
-      valid_days: 0,
-      max_visits: 0,
+      employee: "EEU-NEURO-007",
+      eeu_staff_id: "EEU-NEURO-007",
       image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=256",
       bio: "Director of Cognitive Neurology, leading clinical trials in neurodegenerative conditions, epilepsy management, and stroke rehabilitation.",
       subspecialties: ["Cognitive Neurology", "Epilepsy", "Neuro-rehabilitation"],
@@ -278,7 +262,7 @@ export default function PractitionerCreatePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Layout & UI Tabs State
-  const [activeTab, setActiveTab] = useState<"profile" | "clinical" | "fees" | "schedule">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "clinical" | "schedule">("profile");
   const [viewMode, setViewMode] = useState<"tabs" | "all">("tabs");
   const [previewMode, setPreviewMode] = useState<"card" | "id_badge">("card");
 
@@ -306,20 +290,14 @@ export default function PractitionerCreatePage() {
     practitioner_type: "Internal",
     user: null as number | null,
     employee: "",
-    hospital: "Main Referral Hospital",
+    eeu_staff_id: "",
+    hospital: "EEU Medical Center",
     department: null as number | null,
     designation: "Consultant Physician",
     address: "",
     bio: "",
     subspecialties: ["General Medicine", "Primary Care"],
-    office_room: "OPD Consultation Suite 101",
-    op_consulting_charge_item: null as number | null,
-    op_consulting_charge: 100,
-    inpatient_visit_charge_item: null as number | null,
-    inpatient_visit_charge: 150,
-    enable_free_follow_ups: true,
-    valid_days: 7,
-    max_visits: 1,
+    office_room: "Consultation Suite 101",
     image: "",
     // Practice Schedule Builder
     create_initial_schedules: true,
@@ -408,11 +386,7 @@ export default function PractitionerCreatePage() {
       email: template.data.email,
       hospital: template.data.hospital,
       employee: template.data.employee,
-      op_consulting_charge: template.data.op_consulting_charge,
-      inpatient_visit_charge: template.data.inpatient_visit_charge,
-      enable_free_follow_ups: template.data.enable_free_follow_ups,
-      valid_days: template.data.valid_days,
-      max_visits: template.data.max_visits,
+      eeu_staff_id: template.data.eeu_staff_id || "",
       image: template.data.image,
       bio: template.data.bio,
       subspecialties: template.data.subspecialties,
@@ -474,9 +448,9 @@ export default function PractitionerCreatePage() {
   const completeness = useMemo(() => {
     const items = [
       { label: "Provider Legal Name", done: Boolean(form.first_name.trim()), step: "profile" as const },
+      { label: "EEU Staff ID Assigned", done: Boolean(form.eeu_staff_id?.trim()), step: "profile" as const },
       { label: "Department Assigned", done: Boolean(form.department), step: "clinical" as const },
       { label: "Clinical Designation", done: Boolean(form.designation.trim()), step: "clinical" as const },
-      { label: "Consultation Tariff Set", done: Number(form.op_consulting_charge) > 0, step: "fees" as const },
       { label: "Direct Phone or Email", done: Boolean(form.mobile_phone || form.email), step: "profile" as const },
       { label: "Weekly Schedule Roster", done: form.schedule_days.length > 0, step: "schedule" as const },
     ];
@@ -517,14 +491,15 @@ export default function PractitionerCreatePage() {
         address: combinedAddress,
         hospital: form.hospital.trim(),
         employee: form.employee.trim(),
+        eeu_staff_id: form.eeu_staff_id.trim(),
         user: form.user,
-        op_consulting_charge: form.op_consulting_charge,
-        op_consulting_charge_item: form.op_consulting_charge_item,
-        inpatient_visit_charge: form.inpatient_visit_charge,
-        inpatient_visit_charge_item: form.inpatient_visit_charge_item,
-        enable_free_follow_ups: form.enable_free_follow_ups,
-        valid_days: form.valid_days,
-        max_visits: form.max_visits,
+        op_consulting_charge: 0,
+        op_consulting_charge_item: null,
+        inpatient_visit_charge: 0,
+        inpatient_visit_charge_item: null,
+        enable_free_follow_ups: false,
+        valid_days: 0,
+        max_visits: 0,
         image: form.image.trim(),
       };
 
@@ -749,15 +724,8 @@ export default function PractitionerCreatePage() {
               done: Boolean(form.department && form.designation.trim()),
             },
             {
-              id: "fees" as const,
-              label: "3. Tariff & Billing",
-              desc: "OP/IP fees & policies",
-              icon: "solar:dollar-minimalistic-bold-duotone",
-              done: Number(form.op_consulting_charge) > 0,
-            },
-            {
               id: "schedule" as const,
-              label: "4. Availability & Roster",
+              label: "3. Availability & Roster",
               desc: "Weekly clinic schedule",
               icon: "solar:calendar-date-bold",
               done: form.schedule_days.length > 0,
@@ -975,6 +943,47 @@ export default function PractitionerCreatePage() {
                       onChange={(e) => update("last_name", e.target.value)}
                       className="mt-1 h-9 text-xs font-medium"
                     />
+                  </div>
+                </div>
+
+                {/* EEU Staff ID & Enterprise Identification */}
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Icon icon="solar:badge-check-bold" size={15} className="text-primary" />
+                        EEU Employee Identification (EEU ID)
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        All practitioners & specialists are salaried Ethiopian Electric Utility (EEU) personnel.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 font-mono font-bold">
+                      EEU Enterprise Staff
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground">
+                        EEU Staff ID <span className="text-primary font-bold">*</span>
+                      </Label>
+                      <Input
+                        placeholder="e.g. EEU-MD-0821"
+                        value={form.eeu_staff_id}
+                        onChange={(e) => update("eeu_staff_id", e.target.value)}
+                        className="mt-1 h-9 text-xs font-mono font-bold uppercase tracking-wider bg-background"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold text-muted-foreground">
+                        EEU Enterprise Role
+                      </Label>
+                      <Input
+                        value="EEU Salaried Medical Specialist"
+                        disabled
+                        className="mt-1 h-9 text-xs font-medium bg-muted/60 text-muted-foreground"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1361,188 +1370,14 @@ export default function PractitionerCreatePage() {
             </Card>
           )}
 
-          {/* ════════ SECTION 3: Fees & Billing Tariffs ════════ */}
-          {(viewMode === "all" || activeTab === "fees") && (
-            <Card className="shadow-xs border-border overflow-hidden">
-              <CardHeader className="pb-3 border-b bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-transparent">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xs border border-amber-500/20">
-                      3
-                    </div>
-                    <div>
-                      <CardTitle className="text-sm font-bold flex items-center gap-2">
-                        <Icon icon="solar:dollar-minimalistic-bold-duotone" size={17} className="text-amber-600" />
-                        Consultation Tariffs & Follow-Up Policies
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                        Set outpatient consultation fee, inpatient ward rounds rate, and free visit validity
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] font-mono">
-                    Step 3
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-5 space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Outpatient Consulting Rate */}
-                  <div className="p-4 rounded-xl border bg-muted/20 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-foreground">
-                        Outpatient (OP) Consultation Fee
-                      </Label>
-                      <Badge variant="outline" className="text-[10px] font-mono bg-background">
-                        Per Visit
-                      </Badge>
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
-                        $
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={form.op_consulting_charge}
-                        onChange={(e) => update("op_consulting_charge", parseFloat(e.target.value) || 0)}
-                        className="pl-8 h-10 text-sm font-mono font-bold bg-background"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] text-muted-foreground">Link Item Tariff Code</Label>
-                      <div className="mt-1">
-                        <EntitySelect
-                          doctype="Item"
-                          rawItems={items}
-                          options={items.map((it) => ({
-                            value: it.id,
-                            label: it.item_name || it.item_code,
-                          }))}
-                          value={form.op_consulting_charge_item}
-                          onChange={(v) => update("op_consulting_charge_item", v)}
-                          placeholder="Select billing item"
-                          emptyText="No items found"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Inpatient Visit Charge */}
-                  <div className="p-4 rounded-xl border bg-muted/20 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-foreground">
-                        Inpatient (IP) Ward Round Fee
-                      </Label>
-                      <Badge variant="outline" className="text-[10px] font-mono bg-background">
-                        Per Round
-                      </Badge>
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
-                        $
-                      </span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={form.inpatient_visit_charge}
-                        onChange={(e) => update("inpatient_visit_charge", parseFloat(e.target.value) || 0)}
-                        className="pl-8 h-10 text-sm font-mono font-bold bg-background"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-[11px] text-muted-foreground">Link Item Tariff Code</Label>
-                      <div className="mt-1">
-                        <EntitySelect
-                          doctype="Item"
-                          rawItems={items}
-                          options={items.map((it) => ({
-                            value: it.id,
-                            label: it.item_name || it.item_code,
-                          }))}
-                          value={form.inpatient_visit_charge_item}
-                          onChange={(v) => update("inpatient_visit_charge_item", v)}
-                          placeholder="Select billing item"
-                          emptyText="No items found"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Free Follow-up Rules */}
-                <div className="p-4 rounded-xl border border-border/80 bg-background space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <input
-                        type="checkbox"
-                        id="free_followup"
-                        checked={form.enable_free_follow_ups}
-                        onChange={(e) => update("enable_free_follow_ups", e.target.checked)}
-                        className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
-                      />
-                      <label htmlFor="free_followup" className="text-xs font-bold text-foreground cursor-pointer">
-                        Enable Complimentary Clinical Follow-Up Visits
-                      </label>
-                    </div>
-                    {form.enable_free_follow_ups && (
-                      <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                        Policy Active
-                      </Badge>
-                    )}
-                  </div>
-
-                  {form.enable_free_follow_ups && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border/60 animate-in fade-in duration-200">
-                      <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">
-                          Validity Window (Days)
-                        </Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={form.valid_days}
-                          onChange={(e) => update("valid_days", parseInt(e.target.value) || 0)}
-                          className="mt-1 h-9 text-xs font-mono font-bold"
-                        />
-                        <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                          Patient is exempt from consultation fee within this timeframe
-                        </span>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">
-                          Max Permitted Free Visits
-                        </Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={form.max_visits}
-                          onChange={(e) => update("max_visits", parseInt(e.target.value) || 0)}
-                          className="mt-1 h-9 text-xs font-mono font-bold"
-                        />
-                        <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                          Maximum complimentary follow-up encounters allowed
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ════════ SECTION 4: Practice Availability & Roster ════════ */}
+          {/* ════════ SECTION 3: Practice Availability & Roster ════════ */}
           {(viewMode === "all" || activeTab === "schedule") && (
             <Card className="shadow-xs border-border overflow-hidden">
               <CardHeader className="pb-3 border-b bg-gradient-to-r from-purple-500/5 via-violet-500/5 to-transparent">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="h-7 w-7 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold text-xs border border-purple-500/20">
-                      4
+                      3
                     </div>
                     <div>
                       <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -1715,8 +1550,7 @@ export default function PractitionerCreatePage() {
                 disabled={activeTab === "profile"}
                 onClick={() => {
                   if (activeTab === "clinical") setActiveTab("profile");
-                  if (activeTab === "fees") setActiveTab("clinical");
-                  if (activeTab === "schedule") setActiveTab("fees");
+                  if (activeTab === "schedule") setActiveTab("clinical");
                 }}
                 className="text-xs gap-1"
               >
@@ -1730,8 +1564,7 @@ export default function PractitionerCreatePage() {
                   size="sm"
                   onClick={() => {
                     if (activeTab === "profile") setActiveTab("clinical");
-                    if (activeTab === "clinical") setActiveTab("fees");
-                    if (activeTab === "fees") setActiveTab("schedule");
+                    if (activeTab === "clinical") setActiveTab("schedule");
                   }}
                   className="text-xs gap-1 bg-primary text-primary-foreground font-semibold"
                 >
@@ -1899,24 +1732,19 @@ export default function PractitionerCreatePage() {
                     </div>
                   )}
 
-                  {/* Fee Bar */}
-                  <div className="p-2.5 rounded-lg bg-muted/30 border border-border/50 grid grid-cols-2 gap-2 text-xs">
-                    <div>
+                  {/* EEU Staff Identity Bar */}
+                  <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
                       <span className="text-[10px] text-muted-foreground block font-medium">
-                        Outpatient Consult
+                        EEU Staff ID
                       </span>
-                      <span className="font-mono font-bold text-xs text-foreground">
-                        ${Number(form.op_consulting_charge || 0).toFixed(2)}
+                      <span className="font-mono font-bold text-xs text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                        {form.eeu_staff_id || "EEU-PENDING"}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-muted-foreground block font-medium">
-                        Inpatient Round
-                      </span>
-                      <span className="font-mono font-bold text-xs text-foreground">
-                        ${Number(form.inpatient_visit_charge || 0).toFixed(2)}
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-muted-foreground block">
+                      Enterprise Salaried Healthcare Staff
+                    </span>
                   </div>
 
                   {/* Location & Schedule summary */}
@@ -2029,8 +1857,8 @@ export default function PractitionerCreatePage() {
                     ||| | |||| | ||| || ||||| | ||||
                   </div>
                   <div className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
-                    <span>ID: HLC-PRA-NEW</span>
-                    <span>EXP: 2028-12-31</span>
+                    <span>EEU ID: {form.eeu_staff_id || "PENDING"}</span>
+                    <span>EEU STAFF</span>
                   </div>
                 </div>
               </div>

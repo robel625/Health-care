@@ -1,0 +1,122 @@
+[
+  {
+    "code": "1A00",
+    "name": "Cholera",
+    "display": "Cholera (1A00)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A02",
+    "name": "Intestinal infections due to Shigella",
+    "display": "Intestinal infections due to Shigella (1A02)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A03",
+    "name": "Intestinal infections due to Escherichia coli",
+    "display": "Intestinal infections due to Escherichia coli (1A03)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A07",
+    "name": "Typhoid fever",
+    "display": "Typhoid fever (1A07)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A08",
+    "name": "Paratyphoid fever",
+    "display": "Paratyphoid fever (1A08)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A09",
+    "name": "Infections due to other Salmonella",
+    "display": "Infections due to other Salmonella (1A09)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A0Y",
+    "name": "Other specified bacterial intestinal infections",
+    "display": "Other specified bacterial intestinal infections (1A0Y)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A0Z",
+    "name": "Bacterial intestinal infections, unspecified",
+    "display": "Bacterial intestinal infections, unspecified (1A0Z)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A11",
+    "name": "Botulism",
+    "display": "Botulism (1A11)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A1Z",
+    "name": "Bacterial foodborne intoxications, unspecified",
+    "display": "Bacterial foodborne intoxications, unspecified (1A1Z)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A2Z",
+    "name": "Viral intestinal infections, unspecified",
+    "display": "Viral intestinal infections, unspecified (1A2Z)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A31",
+    "name": "Giardiasis",
+    "display": "Giardiasis (1A31)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A32",
+    "name": "Cryptosporidiosis",
+    "display": "Cryptosporidiosis (1A32)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A33",
+    "name": "Cystoisosporiasis",
+    "display": "Cystoisosporiasis (1A33)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A36",
+    "name": "Amoebiasis",
+    "display": "Amoebiasis (1A36)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A36.10",
+    "name": "Amoebic liver abscess",
+    "display": "Amoebic liver abscess (1A36.10)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A36.1Y",
+    "name": "Amoebiasis of other specified sites",
+    "display": "Amoebiasis of other specified sites (1A36.1Y)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A3Y",
+    "name": "Other specified protozoal intestinal infections",
+    "display": "Other specified protozoal intestinal infections (1A3Y)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A40",
+    "name": "Gastroenteritis or colitis without specification of infectious agent",
+    "display": "Gastroenteritis or colitis without specification of infectious agent (1A40)",
+    "chapter": "Chapter 1: Certain infectious or"
+  },
+  {
+    "code": "1A60",
+    "name": "Congenital syphilis",
+    "display": "Congenital syphilis (1A60)",
+    "chapter": "Chapter 1: Certain infectious or"
+  }
+]

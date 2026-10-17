@@ -14,6 +14,7 @@ import {
   type HealthcarePractitioner,
 } from "@/api/services/healthcareService";
 import { formatAge } from "@/utils/age";
+import eeuLogo from "@/assets/images/eeu-logo.png";
 
 const POPULAR_REFERRAL_HOSPITALS = [
   "Tikur Anbessa Specialized Hospital (Black Lion)",
@@ -56,7 +57,7 @@ export default function ExternalReferralCreatePage() {
 
   const [patientDetails, setPatientDetails] = useState<Patient | null>(null);
   const [practitionerDetails, setPractitionerDetails] = useState<HealthcarePractitioner | null>(null);
-  const [companyName, setCompanyName] = useState("Healthcare Center & Hospital");
+  const [companyName, setCompanyName] = useState("Ethiopian Electric Utility Medium Clinic");
   const [departmentName, setDepartmentName] = useState("General Outpatient");
 
   // Clinical data prefill containers
@@ -100,7 +101,43 @@ export default function ExternalReferralCreatePage() {
         setCompanyName(compsList[0].company_name);
       }
 
-      // If an encounter ID is provided in query params, fetch its details to populate patient, doctor, and clinical data
+      // 1. Read live active encounter context from sessionStorage
+      let sessionCtx: any = null;
+      try {
+        const raw = sessionStorage.getItem("active_encounter_context");
+        if (raw) sessionCtx = JSON.parse(raw);
+      } catch (e) {
+        console.warn("Failed to parse active_encounter_context", e);
+      }
+
+      let diagnoses: string[] = [];
+      let symptoms: string[] = [];
+      let medications: string[] = [];
+      let labs: string[] = [];
+      let procedures: string[] = [];
+      let comment = "";
+      let appointmentType = "";
+
+      if (sessionCtx) {
+        if (sessionCtx.patientId && !patientParam) {
+          setSelectedPatientId(sessionCtx.patientId);
+        }
+        if (sessionCtx.practitionerId && !practitionerParam) {
+          setSelectedPractitionerId(sessionCtx.practitionerId);
+        }
+        if (sessionCtx.departmentName) {
+          setDepartmentName(sessionCtx.departmentName);
+        }
+        if (sessionCtx.diagnoses?.length) diagnoses = [...sessionCtx.diagnoses];
+        if (sessionCtx.symptoms?.length) symptoms = [...sessionCtx.symptoms];
+        if (sessionCtx.medications?.length) medications = [...sessionCtx.medications];
+        if (sessionCtx.labs?.length) labs = [...sessionCtx.labs];
+        if (sessionCtx.procedures?.length) procedures = [...sessionCtx.procedures];
+        if (sessionCtx.comment) comment = sessionCtx.comment;
+        if (sessionCtx.appointmentType) appointmentType = sessionCtx.appointmentType;
+      }
+
+      // 2. If encounter ID is provided, query the encounter API and merge data
       if (encounterParam) {
         try {
           const encId = Number(encounterParam);
@@ -121,49 +158,115 @@ export default function ExternalReferralCreatePage() {
               if (comp) setCompanyName(comp.company_name);
             }
 
-            // Extract clinical entries
-            const diagnoses = (enc.diagnoses_list || []).map((d: any) => d.diagnosis).filter(Boolean);
-            const symptoms = (enc.symptoms_list_items || []).map((s: any) => s.symptom).filter(Boolean);
-            const medications = (enc.drug_prescription_items || [])
+            const encDiags = (enc.diagnoses_list || [])
+              .map((d: any) => d.diagnosis || d.diagnosis_name)
+              .filter(Boolean);
+            const encSyms = (enc.symptoms_list_items || [])
+              .map((s: any) => s.symptom || s.symptom_name)
+              .filter(Boolean);
+            const encMeds = (enc.drug_prescription_items || [])
               .map((d: any) => `${d.drug_name || d.medication || ""} ${d.dosage || ""} ${d.period || ""}`.trim())
               .filter(Boolean);
-            const labs = (enc.lab_prescription_items || [])
-              .map((l: any) => String(l.lab_test_name || l.lab_test_code || ""))
+            const encLabs = (enc.lab_prescription_items || [])
+              .map((l: any) => `${l.lab_test_name || l.lab_test_code || ""}${l.lab_test_comment || l.comments ? ` (${l.lab_test_comment || l.comments})` : ""}`.trim())
+              .filter(Boolean);
+            const encProcs = (enc.procedure_prescription_items || [])
+              .map((p: any) => `${p.procedure_name || p.procedure || ""}${p.comments ? ` (${p.comments})` : ""}`.trim())
               .filter(Boolean);
 
-            setDefaultDiagnoses(diagnoses);
-            setDefaultSymptoms(symptoms);
-            setDefaultMedications(medications);
-            setDefaultLabResults(labs);
-
-            setForm((prev) => ({
-              ...prev,
-              clinical_indication:
-                prev.clinical_indication ||
-                (symptoms.length > 0
-                  ? `Patient presents with: ${symptoms.join(", ")}. Requires advanced diagnostic evaluation and specialized clinical management.`
-                  : "Patient requires specialized tertiary consultation and further evaluation."),
-              provisional_diagnosis:
-                prev.provisional_diagnosis ||
-                (diagnoses.length > 0
-                  ? diagnoses.join("; ")
-                  : "Clinical assessment pending diagnostic confirmation."),
-              treatment_summary:
-                prev.treatment_summary ||
-                (medications.length > 0
-                  ? `Currently Prescribed Medications:\n${medications.map((m: string) => `• ${m}`).join("\n")}`
-                  : "No prior active medications administered in current encounter."),
-              relevant_test_results:
-                prev.relevant_test_results ||
-                (labs.length > 0
-                  ? `Recent Diagnostic/Lab Investigations:\n${labs.map((t: string) => `• ${t}`).join("\n")}`
-                  : "Routine clinical vitals recorded. Full chart attached."),
-            }));
+            diagnoses = Array.from(new Set([...diagnoses, ...encDiags]));
+            symptoms = Array.from(new Set([...symptoms, ...encSyms]));
+            medications = Array.from(new Set([...medications, ...encMeds]));
+            labs = Array.from(new Set([...labs, ...encLabs]));
+            procedures = Array.from(new Set([...procedures, ...encProcs]));
+            if (!comment && enc.encounter_comment) comment = enc.encounter_comment;
+            if (!appointmentType && (enc.appointment_type_name || enc.appointment_type)) {
+              appointmentType = enc.appointment_type_name || enc.appointment_type;
+            }
           }
         } catch (encErr) {
           console.error("Failed to load encounter context", encErr);
         }
       }
+
+      setDefaultDiagnoses(diagnoses);
+      setDefaultSymptoms(symptoms);
+      setDefaultMedications(medications);
+      setDefaultLabResults(labs);
+
+      // ── Formulate Clinical Indications & Answers for all 5 questions ──
+      // 1. Clinical Indication & Reason for Referral
+      let indicationText = "";
+      if (symptoms.length > 0 && diagnoses.length > 0) {
+        indicationText = `Patient presents with acute presentation of ${symptoms.join(", ")}. Primary clinical evaluation indicates ${diagnoses.join("; ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Requires advanced specialist evaluation, diagnostic workup, and continuing tertiary care.`;
+      } else if (symptoms.length > 0) {
+        indicationText = `Patient presents with: ${symptoms.join(", ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Requires specialized diagnostic evaluation and specialist consultation.`;
+      } else if (diagnoses.length > 0) {
+        indicationText = `Patient evaluated for: ${diagnoses.join("; ")}.${comment ? ` Attending clinician note: ${comment}.` : ""} Referred for tertiary consultation and continuing clinical management.`;
+      } else {
+        indicationText = `Patient evaluated at EEU Medium Clinic and referred for advanced diagnostic investigation and specialist management.${comment ? ` Attending clinician note: ${comment}` : ""}`;
+      }
+
+      // 2. Provisional Diagnosis / Working Clinical Assessment
+      let provisionalDiagnosisText = "";
+      if (diagnoses.length > 0) {
+        provisionalDiagnosisText = diagnoses.join("; ");
+      } else if (symptoms.length > 0) {
+        provisionalDiagnosisText = `Acute symptomatic presentation: ${symptoms.join(", ")} (Definitive diagnosis pending diagnostic confirmation)`;
+      } else {
+        provisionalDiagnosisText = "Clinical assessment pending diagnostic confirmation.";
+      }
+
+      // 3. Current Treatment & Medications Administered
+      let treatmentSummaryText = "";
+      const treatmentBlocks: string[] = [];
+      if (medications.length > 0) {
+        treatmentBlocks.push(`Currently Prescribed Medications:\n${medications.map((m) => `• ${m}`).join("\n")}`);
+      }
+      if (procedures.length > 0) {
+        treatmentBlocks.push(`Procedures Performed:\n${procedures.map((p) => `• ${p}`).join("\n")}`);
+      }
+      if (treatmentBlocks.length > 0) {
+        treatmentSummaryText = treatmentBlocks.join("\n\n");
+      } else {
+        treatmentSummaryText = "Symptomatic outpatient supportive care initiated. No complex or parenteral medications administered prior to transfer.";
+      }
+
+      // 4. Relevant Test & Investigation Results
+      let testResultsText = "";
+      if (labs.length > 0) {
+        testResultsText = `Recent Diagnostic & Laboratory Investigations:\n${labs.map((t) => `• ${t}`).join("\n")}\n\nBedside vitals and physical examination recorded on file.`;
+      } else {
+        testResultsText = "Bedside vital signs and physical assessment recorded on file. Full diagnostic laboratory profile and imaging recommended upon admission.";
+      }
+
+      // 5. Special Instructions, Precautions & Transport Notes
+      const isUrgent =
+        appointmentType?.toLowerCase().includes("urgent") ||
+        appointmentType?.toLowerCase().includes("emergency");
+      const priorityVal: "Routine" | "Urgent" | "Emergency" = appointmentType?.toLowerCase().includes("emergency")
+        ? "Emergency"
+        : appointmentType?.toLowerCase().includes("urgent")
+        ? "Urgent"
+        : "Routine";
+
+      let transportNotes = isUrgent
+        ? "URGENT TRANSPORT: Patient requires continuous vitals monitoring during transit. Provide supportive oxygen if SpO2 fluctuates."
+        : "Patient ambulatory and clinically stable for standard transport.";
+      if (comment) {
+        transportNotes += `\nAttending Clinician Remark: ${comment}`;
+      }
+      transportNotes += "\nDocumentation: Patient transferred with official referral dossier and medical encounter summary.\nContact referring Ethiopian Electric Utility Medium Clinic if condition changes during transit (+251 11 515 7103).";
+
+      setForm((prev) => ({
+        ...prev,
+        priority: prev.priority !== "Routine" ? prev.priority : priorityVal,
+        clinical_indication: prev.clinical_indication || indicationText,
+        provisional_diagnosis: prev.provisional_diagnosis || provisionalDiagnosisText,
+        treatment_summary: prev.treatment_summary || treatmentSummaryText,
+        relevant_test_results: prev.relevant_test_results || testResultsText,
+        referral_notes: prev.referral_notes || transportNotes,
+      }));
     } catch (err) {
       console.error("Failed to load referral masters", err);
     } finally {
@@ -761,16 +864,34 @@ export default function ExternalReferralCreatePage() {
         >
           {/* Header Banner */}
           <div className="border-b-2 border-blue-900 pb-3 mb-5 flex justify-between items-start">
-            <div>
-              <h1 className="text-xl font-extrabold uppercase tracking-tight text-blue-950">
-                {companyName}
-              </h1>
-              <p className="text-xs text-slate-600 font-medium">
-                Clinical Services & Continuity of Care • Referral Management Unit
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Medical District Way • Tel: +251-11-000-0000 • Email: referrals@clinic.org
-              </p>
+            <div className="flex items-start gap-3">
+              <img
+                src={eeuLogo}
+                alt="EEU Emblem"
+                className="w-8 h-8 object-contain shrink-0 print:w-6 print:h-6 print:max-h-6"
+                style={{
+                  printColorAdjust: "exact",
+                  WebkitPrintColorAdjust: "exact",
+                  maxHeight: "26px",
+                }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/eeu-logo.png";
+                }}
+              />
+              <div>
+                <div className="text-[12px] font-bold text-[#D84315] leading-tight">
+                  የኢትዮጵያ ኤሌክትሪክ አገልግሎት
+                </div>
+                <h1 className="text-base font-extrabold uppercase tracking-tight text-blue-950">
+                  Ethiopian Electric Utility Medium Clinic
+                </h1>
+                <p className="text-xs text-slate-600 font-medium">
+                  Clinical Services & Outpatient Care • Referral Management Unit
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Addis Ababa, Ethiopia • Tel: +251 11 515 7103
+                </p>
+              </div>
             </div>
 
             <div className="text-right space-y-1">
@@ -894,16 +1015,14 @@ export default function ExternalReferralCreatePage() {
           </div>
 
           {/* 5. Special Notes & Transport Instructions */}
-          {form.referral_notes && (
-            <div className="mb-4">
-              <div className="text-xs font-bold text-blue-950 uppercase tracking-wide border-b border-slate-300 pb-0.5 mb-1.5">
-                5. Special Instructions & Precautions
-              </div>
-              <div className="text-xs text-slate-800 bg-amber-50/70 border border-amber-200 rounded p-3 whitespace-pre-wrap leading-relaxed">
-                {form.referral_notes}
-              </div>
+          <div className="mb-4">
+            <div className="text-xs font-bold text-blue-950 uppercase tracking-wide border-b border-slate-300 pb-0.5 mb-1.5">
+              5. Special Instructions, Precautions & Transport Notes
             </div>
-          )}
+            <div className="text-xs text-slate-800 bg-amber-50/70 border border-amber-200 rounded p-3 whitespace-pre-wrap leading-relaxed">
+              {form.referral_notes || "Patient ambulatory and clinically stable for standard transport."}
+            </div>
+          </div>
 
           {/* Physician Endorsement & Destination Facility Receipt */}
           <div className="grid grid-cols-2 gap-8 mt-8 pt-4 border-t border-dashed border-slate-300 text-xs">

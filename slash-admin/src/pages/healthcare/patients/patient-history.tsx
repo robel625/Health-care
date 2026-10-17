@@ -173,8 +173,6 @@ export default function PatientHistoryPage() {
         rxRes,
         medReqRes,
         labRes,
-        thRes,
-        inptRes,
         obsRes,
         pmrRes,
         srRes,
@@ -186,8 +184,6 @@ export default function PatientHistoryPage() {
         HealthcareApi.prescriptions.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
         HealthcareApi.medicationRequests.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
         HealthcareApi.labTests.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
-        HealthcareApi.therapyPlans.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
-        HealthcareApi.inpatientRecords.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
         HealthcareApi.observations.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
         HealthcareApi.medicalRecords.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
         HealthcareApi.serviceRequests.list({ patient: pid, page_size: 150 }).catch(() => ({ results: [] })),
@@ -196,8 +192,7 @@ export default function PatientHistoryPage() {
       setPatient(pRes);
       const vsList = (vsRes as any).results || [];
       setVitals(vsList);
-      const inptList = (inptRes as any).results || [];
-      setInpatients(inptList);
+      setInpatients([]);
 
       const timeline: PatientTimelineEvent[] = [];
 
@@ -403,63 +398,7 @@ export default function PatientHistoryPage() {
         });
       }
 
-      // 7. Inpatient Records
-      for (const inpt of inptList) {
-        const rawTime = inpt.admission_date || inpt.creation;
-        const { ts, dateStr } = parseTimestamp(rawTime);
-        const config = DOCTYPE_CONFIG.InpatientRecord;
-        timeline.push({
-          id: `inpt-${inpt.id}`,
-          doctype: "InpatientRecord",
-          reference_name: inpt.inpatient_record_id || `IP-${inpt.id}`,
-          time: rawTime || "",
-          timestamp: ts,
-          dateStr,
-          title: `Hospital Inpatient Admission (${inpt.status || "Admitted"})`,
-          subtitle: `Ward: ${inpt.ward_name || "Ward Unit"} · Bed: ${inpt.bed_name || "Unassigned"}`,
-          user: inpt.admitting_practitioner_name || "Admissions",
-          status: inpt.status || "Admitted",
-          icon: config.icon,
-          accent: config.accent,
-          badgeClass: config.badgeClass,
-          details: {
-            Status: inpt.status || "Admitted",
-            "Ward & Bed": `${inpt.ward_name || "General"} · Bed ${inpt.bed_name || "-"}`,
-            "Admission Reason": inpt.reason_for_admission || inpt.admission_reason || "Clinical observation",
-            "Admission Date": inpt.admission_date || "Recorded",
-            "Discharge Date": inpt.discharge_date || "Ongoing Admission",
-          },
-          raw: inpt,
-        });
-      }
 
-      // 8. Therapy Plans
-      for (const th of ((thRes as any).results || [])) {
-        const rawTime = th.start_date || th.creation;
-        const { ts, dateStr } = parseTimestamp(rawTime);
-        const config = DOCTYPE_CONFIG.TherapyPlan;
-        timeline.push({
-          id: `th-${th.id}`,
-          doctype: "TherapyPlan",
-          reference_name: th.therapy_plan_id || `TP-${th.id}`,
-          time: rawTime || "",
-          timestamp: ts,
-          dateStr,
-          title: `Therapy Plan: ${th.therapy_type_name || "Rehabilitation Plan"}`,
-          subtitle: `Status: ${th.status || "Active"} · Sessions: ${th.total_sessions_completed || 0}/${th.total_sessions || "Course"}`,
-          user: th.practitioner_name || "Therapist",
-          status: th.status || "Active",
-          icon: config.icon,
-          accent: config.accent,
-          badgeClass: config.badgeClass,
-          details: {
-            "Therapy Program": th.therapy_type_name || "Physical Rehab",
-            Status: th.status || "Active",
-            "Sessions Completed": `${th.total_sessions_completed || 0} sessions`,
-          },
-          raw: th,
-        });
-      }
 
       // 9. Clinical Observations
       for (const obs of ((obsRes as any).results || [])) {

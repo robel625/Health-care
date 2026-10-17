@@ -1,6 +1,9 @@
 import re
 import random
+import logging
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 from rest_framework import viewsets, status, permissions, parsers
 from rest_framework.exceptions import ValidationError
@@ -10,6 +13,12 @@ from django.utils import timezone
 from django.db.models import Sum, Q, F, Count
 
 from apps.roles.permissions import HasPermissionOrAdmin
+from .permissions import (
+    HealthcareRBACPermission, is_doctor, is_healthcare_admin,
+    is_receptionist, is_lab_tech, is_pharmacist,
+    get_practitioner_for_user, has_active_care_relationship,
+    can_view_confidential_records,
+)
 from .models import PharmacyWarehouse, PharmacyStock, PharmacyStockEntry
 
 from .models import (
@@ -142,7 +151,7 @@ class HealthcareModelViewSet(viewsets.ModelViewSet):
     on a subclass when needed).
     """
 
-    permission_classes = [HasPermissionOrAdmin]
+    permission_classes = [HealthcareRBACPermission, HasPermissionOrAdmin]
 
     @property
     def doctype_name(self):
@@ -254,12 +263,418 @@ class PatientViewSet(HealthcareModelViewSet):
             docnames = list(DocumentTag.objects.filter(doctype="Patient").filter(q_tags).values_list("docname", flat=True))
             int_ids = [int(x) for x in docnames if str(x).isdigit()]
             qs = qs.filter(Q(id__in=int_ids) | Q(patient_id__in=docnames))
+
+        # Assigned patients filter for practitioners
+        my_patients = self.request.query_params.get("my_patients")
+        if my_patients in ["true", "1", "True"]:
+            practitioner = get_practitioner_for_user(self.request.user)
+            if practitioner:
+                from .models import PatientAppointment, PatientEncounter, InpatientRecord
+                assigned_patient_ids = set(
+                    PatientAppointment.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    PatientEncounter.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    InpatientRecord.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                )
+                qs = qs.filter(id__in=assigned_patient_ids)
+            elif not (self.request.user.is_superuser or self.request.user.is_staff):
+                qs = qs.none()
+
         return qs
 
     def perform_create(self, serializer):
         instance = serializer.save()
         from .automation import on_patient_create
         on_patient_create(instance)
+
+    @action(detail=False, methods=["get"], url_path="sample-template", permission_classes=[permissions.AllowAny])
+    def sample_template(self, request):
+        # Branded Excel (.xlsx) template generator for bulk import
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from django.http import HttpResponse
+        import io
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "EEU Employees & Beneficiaries"
+
+        headers = [
+            "Staff ID",
+            "First Name",
+            "Middle Name",
+            "Last Name",
+            "Gender",
+            "Date of Birth",
+            "Mobile Phone",
+            "Email Address",
+            "Employer Scheme",
+            "Department / Directorate",
+            "Job Cadre / Position",
+            "Region",
+            "Work Station",
+            "Blood Group",
+            "Beneficiary Type",
+        ]
+
+        header_fill = PatternFill(start_color="0F4C81", end_color="0F4C81", fill_type="solid")
+        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+        center_align = Alignment(horizontal="center", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
+
+        ws.row_dimensions[1].height = 28
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_align
+
+        sample_rows = [
+            [
+                "EEU-657854",
+                "Abebe",
+                "Kebede",
+                "Tadesse",
+                "Male",
+                "1988-04-12",
+                "+251911234567",
+                "abebe.kebede@eeu.gov.et",
+                "Ethiopian Electric Utility (EEU)",
+                "Distribution Directorate",
+                "Senior Electrical Engineer",
+                "Addis Ababa",
+                "Mexico Substation",
+                "O+",
+                "Staff",
+            ],
+            [
+                "EEFC-10023",
+                "Yared",
+                "Bayeh",
+                "Kassaye",
+                "Male",
+                "1997-01-22",
+                "+251922345678",
+                "yared.bayeh@eeu.gov.et",
+                "Ethiopian Electric Football club (EEFC)",
+                "Ethiopian Electric Football Club (EEFC)",
+                "Central Midfielder",
+                "Addis Ababa",
+                "Abebe Bikila Stadium",
+                "A+",
+                "Staff",
+            ],
+            [
+                "RET-20412",
+                "Almaz",
+                "Haile",
+                "Gebre",
+                "Female",
+                "1961-09-15",
+                "+251933456789",
+                "almaz.haile@gmail.com",
+                "Retired Employee",
+                "Pension & Retired Staff Directorate",
+                "Retired Senior Accountant",
+                "Addis Ababa",
+                "Head Office",
+                "B+",
+                "Staff",
+            ],
+            [
+                "others-578879",
+                "Dawit",
+                "Mulugeta",
+                "Bekele",
+                "Male",
+                "1992-06-30",
+                "+251944567890",
+                "dawit.mulugeta@contractor.com",
+                "Others",
+                "External Construction & Infrastructure",
+                "Civil Engineer Contractor",
+                "Oromia",
+                "Gelan Depot",
+                "AB+",
+                "Staff",
+            ],
+        ]
+
+        data_font = Font(name="Segoe UI", size=10)
+        for row_idx, row_data in enumerate(sample_rows, 2):
+            ws.row_dimensions[row_idx].height = 20
+            for col_idx, val in enumerate(row_data, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                cell.font = data_font
+                cell.alignment = left_align
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="eeu_employee_import_template.xlsx"'
+        return response
+
+    @action(detail=False, methods=["post"], url_path="bulk-import", parser_classes=[parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser])
+    def bulk_import(self, request):
+        """
+        Bulk import employees/patients from uploaded Excel (.xlsx, .xls) or CSV.
+        Supports query param dry_run=true for preview & pre-validation.
+        """
+        import io
+        import csv
+        from django.db import transaction
+        from datetime import datetime, date
+
+        upload_file = request.FILES.get("file")
+        if not upload_file:
+            return Response({"error": "No file uploaded. Please provide an Excel (.xlsx) or CSV file."}, status=status.HTTP_400_BAD_REQUEST)
+
+        dry_run = str(request.data.get("dry_run", "")).lower() in ("true", "1") or str(request.query_params.get("dry_run", "")).lower() in ("true", "1")
+
+        filename = upload_file.name.lower()
+        rows_data = []
+
+        try:
+            if filename.endswith(".csv"):
+                content = upload_file.read().decode("utf-8-sig", errors="replace")
+                reader = csv.DictReader(io.StringIO(content))
+                for r in reader:
+                    rows_data.append({k.strip().lower() if k else "": (v.strip() if v else "") for k, v in r.items()})
+            elif filename.endswith((".xlsx", ".xls")):
+                import openpyxl
+                wb = openpyxl.load_workbook(upload_file, data_only=True)
+                ws = wb.active
+                headers = []
+                for cell in ws[1]:
+                    val = str(cell.value or "").strip().lower()
+                    headers.append(val)
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if not any(row):
+                        continue
+                    row_dict = {}
+                    for h, val in zip(headers, row):
+                        if not h:
+                            continue
+                        if isinstance(val, (datetime, date)):
+                            row_dict[h] = val.strftime("%Y-%m-%d")
+                        elif val is not None:
+                            row_dict[h] = str(val).strip()
+                        else:
+                            row_dict[h] = ""
+                    rows_data.append(row_dict)
+            else:
+                return Response({"error": "Unsupported file format. Please upload .xlsx, .xls, or .csv"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Failed to parse file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not rows_data:
+            return Response({"error": "The uploaded file contains no data rows."}, status=status.HTTP_400_BAD_REQUEST)
+
+        def get_val(row_dict, *aliases):
+            for a in aliases:
+                a_lower = a.lower()
+                for k, v in row_dict.items():
+                    if a_lower in k:
+                        return v
+            return ""
+
+        existing_staff_ids = set(
+            Patient.objects.exclude(eeu_staff_id="").values_list("eeu_staff_id", flat=True)
+        )
+
+        parsed_items = []
+        validation_errors = []
+        valid_count = 0
+        duplicate_count = 0
+
+        for idx, row in enumerate(rows_data, start=2):
+            raw_staff_id = get_val(row, "staff", "payroll", "employee id", "id")
+            first_name = get_val(row, "first name", "firstname", "first", "name")
+            middle_name = get_val(row, "middle name", "middlename", "middle", "father")
+            last_name = get_val(row, "last name", "lastname", "last", "grandfather", "surname")
+            raw_gender = get_val(row, "gender", "sex")
+            raw_dob = get_val(row, "dob", "birth", "date of birth")
+            phone = get_val(row, "phone", "mobile", "cell", "tel")
+            email = get_val(row, "email", "mail")
+            raw_scheme = get_val(row, "scheme", "company", "affiliation", "employer")
+            department = get_val(row, "department", "directorate", "dept")
+            cadre = get_val(row, "cadre", "role", "position", "title", "job")
+            region = get_val(row, "region", "branch", "district")
+            work_station = get_val(row, "work station", "station", "depot", "location", "substation")
+            blood_group = get_val(row, "blood", "group")
+            beneficiary_type = get_val(row, "beneficiary", "type") or "Staff"
+
+            if not first_name:
+                validation_errors.append(f"Row {idx}: First Name is missing.")
+                continue
+
+            g_lower = raw_gender.lower()
+            if g_lower.startswith("m"):
+                sex = "Male"
+            elif g_lower.startswith("f"):
+                sex = "Female"
+            else:
+                sex = "Other" if raw_gender else ""
+
+            s_lower = raw_scheme.lower()
+            if "eefc" in s_lower or "football" in s_lower or "club" in s_lower:
+                scheme = "Ethiopian Electric Football club (EEFC)"
+            elif "retired" in s_lower or "pension" in s_lower:
+                scheme = "Retired Employee"
+            elif "other" in s_lower or "contractor" in s_lower:
+                scheme = "Others"
+            else:
+                scheme = "Ethiopian Electric Utility (EEU)"
+
+            cleaned_id = ""
+            if raw_staff_id:
+                digits = re.sub(r'^(EEU|EEFC|RET|others)-EMP-?', '', str(raw_staff_id), flags=re.I)
+                digits = re.sub(r'^(EEU|EEFC|RET|others)-', '', digits, flags=re.I)
+                digits = re.sub(r'^EMP-?', '', digits, flags=re.I).strip()
+                if "EEFC" in scheme:
+                    cleaned_id = f"EEFC-{digits}" if digits else ""
+                elif "Retired" in scheme:
+                    cleaned_id = f"RET-{digits}" if digits else ""
+                elif "Other" in scheme:
+                    cleaned_id = f"others-{digits}" if digits else ""
+                else:
+                    cleaned_id = f"EEU-{digits}" if digits else ""
+
+            is_duplicate = bool(cleaned_id and cleaned_id in existing_staff_ids)
+            if is_duplicate:
+                duplicate_count += 1
+
+            clean_dob = None
+            if raw_dob:
+                try:
+                    clean_dob = raw_dob[:10]
+                except Exception:
+                    clean_dob = None
+
+            item = {
+                "row_number": idx,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "patient_name": f"{first_name} {middle_name} {last_name}".strip(),
+                "sex": sex,
+                "dob": clean_dob,
+                "mobile": phone,
+                "email": email,
+                "company_affiliation": scheme,
+                "eeu_staff_id": cleaned_id,
+                "eeu_department": department or ("Ethiopian Electric Football Club (EEFC)" if "EEFC" in scheme else "Distribution Directorate"),
+                "eeu_cadre": cadre or "",
+                "eeu_region": region or "Addis Ababa",
+                "eeu_work_station": work_station or "",
+                "blood_group": blood_group or "",
+                "eeu_beneficiary_type": beneficiary_type if beneficiary_type in ("Staff", "Spouse", "Child", "Dependent Parent") else "Staff",
+                "is_duplicate": is_duplicate,
+            }
+            parsed_items.append(item)
+            valid_count += 1
+
+        if dry_run:
+            return Response({
+                "dry_run": True,
+                "total_rows": len(rows_data),
+                "valid_count": valid_count,
+                "duplicate_count": duplicate_count,
+                "error_count": len(validation_errors),
+                "errors": validation_errors[:20],
+                "preview": parsed_items[:50],
+            })
+
+        created_records = []
+        with transaction.atomic():
+            last_p = Patient.objects.order_by("-id").first()
+            next_num = (last_p.id + 1) if last_p else 1
+
+            from apps.setup.models import Company
+            comp = Company.objects.filter(abbr="EEU").first() or Company.objects.first()
+
+            for item in parsed_items:
+                patient = None
+                if item["eeu_staff_id"]:
+                    patient = Patient.objects.filter(eeu_staff_id=item["eeu_staff_id"]).first()
+
+                if not patient:
+                    patient = Patient(
+                        patient_id=f"HLC-PAT-{next_num:05d}",
+                        first_name=item["first_name"],
+                        middle_name=item["middle_name"],
+                        last_name=item["last_name"],
+                        patient_name=item["patient_name"],
+                        sex=item["sex"],
+                        dob=item["dob"],
+                        mobile=item["mobile"],
+                        email=item["email"],
+                        company=comp,
+                        company_affiliation=item["company_affiliation"],
+                        eeu_staff_id=item["eeu_staff_id"],
+                        eeu_department=item["eeu_department"],
+                        eeu_cadre=item["eeu_cadre"],
+                        eeu_region=item["eeu_region"],
+                        eeu_work_station=item["eeu_work_station"],
+                        blood_group=item["blood_group"],
+                        eeu_beneficiary_type=item["eeu_beneficiary_type"],
+                        status="Active",
+                    )
+                    patient.save()
+                    next_num += 1
+                else:
+                    patient.first_name = item["first_name"]
+                    patient.middle_name = item["middle_name"]
+                    patient.last_name = item["last_name"]
+                    patient.patient_name = item["patient_name"]
+                    if item["sex"]:
+                        patient.sex = item["sex"]
+                    if item["dob"]:
+                        patient.dob = item["dob"]
+                    if item["mobile"]:
+                        patient.mobile = item["mobile"]
+                    if item["email"]:
+                        patient.email = item["email"]
+                    if item["company_affiliation"]:
+                        patient.company_affiliation = item["company_affiliation"]
+                    if item["eeu_department"]:
+                        patient.eeu_department = item["eeu_department"]
+                    if item["eeu_cadre"]:
+                        patient.eeu_cadre = item["eeu_cadre"]
+                    if item["eeu_region"]:
+                        patient.eeu_region = item["eeu_region"]
+                    if item["eeu_work_station"]:
+                        patient.eeu_work_station = item["eeu_work_station"]
+                    if item["blood_group"]:
+                        patient.blood_group = item["blood_group"]
+                    patient.save()
+
+                created_records.append({
+                    "id": patient.id,
+                    "patient_id": patient.patient_id,
+                    "name": patient.patient_name,
+                    "staff_id": patient.eeu_staff_id,
+                    "scheme": patient.company_affiliation,
+                })
+
+        return Response({
+            "success": True,
+            "total_rows": len(rows_data),
+            "created_count": len(created_records),
+            "errors": validation_errors,
+            "created_patients": created_records[:30],
+        })
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
@@ -331,8 +746,8 @@ class PatientViewSet(HealthcareModelViewSet):
 class HealthcarePractitionerViewSet(HealthcareModelViewSet):
     queryset = HealthcarePractitioner.objects.select_related("department").all()
     serializer_class = HealthcarePractitionerSerializer
-    search_fields = ["first_name", "last_name", "practitioner_name", "practitioner_id", "mobile_phone", "email"]
-    filterset_fields = ["status", "practitioner_type", "department", "gender"]
+    search_fields = ["first_name", "last_name", "practitioner_name", "practitioner_id", "eeu_staff_id", "mobile_phone", "email"]
+    filterset_fields = ["status", "practitioner_type", "department", "gender", "eeu_staff_id"]
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
@@ -371,12 +786,142 @@ class PatientAppointmentViewSet(HealthcareModelViewSet):
     filterset_fields = ["status", "appointment_type", "appointment_date",
                         "practitioner", "patient", "department"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists and Admins see all appointments for scheduling and operations
+        if is_receptionist(user) or is_healthcare_admin(user):
+            return qs
+
+        # Doctors see appointments assigned to them (or department queue if covering)
+        if is_doctor(user):
+            practitioner = get_practitioner_for_user(user)
+            if practitioner:
+                q_filter = Q(practitioner=practitioner)
+                if practitioner.department_id and self.request.query_params.get("department_queue"):
+                    q_filter |= Q(department_id=practitioner.department_id)
+                return qs.filter(q_filter)
+            return qs.none()
+
+        # Lab Techs and Pharmacists do not browse outpatient appointment registers
+        if (is_lab_tech(user) or is_pharmacist(user)) and not (is_doctor(user) or is_healthcare_admin(user)):
+            return qs.none()
+
+        return qs
+
     @action(detail=False, methods=["get"])
     def today(self, request):
         today = timezone.now().date()
         qs = self.get_queryset().filter(appointment_date=today)
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
+
+    def perform_create(self, serializer):
+        apt = serializer.save()
+        self._notify_patient_assignment(apt, is_reassignment=False)
+
+    def perform_update(self, serializer):
+        old_practitioner_id = self.get_object().practitioner_id
+        apt = serializer.save()
+        new_practitioner_id = apt.practitioner_id
+        if new_practitioner_id and old_practitioner_id != new_practitioner_id:
+            self._notify_patient_assignment(apt, is_reassignment=True)
+
+    def _notify_patient_assignment(self, apt, is_reassignment=False):
+        """
+        Event-driven assignment notification:
+        Notify ONLY the assigned practitioner (never other doctors).
+        Include relevant patient info, assignment details, and scheduled time.
+        """
+        practitioner = apt.practitioner
+        if not practitioner or not practitioner.user:
+            return
+
+        patient = apt.patient
+        patient_name = apt.patient_name or (patient.patient_name if patient else "Patient")
+        patient_id = patient.patient_id if patient else ""
+        age_gender = []
+        if apt.patient_sex:
+            age_gender.append(apt.patient_sex)
+        elif patient and patient.sex:
+            age_gender.append(patient.sex)
+        if apt.patient_age:
+            age_gender.append(f"Age {apt.patient_age}")
+        elif patient and patient.age_display:
+            age_gender.append(f"Age {patient.age_display}")
+        demographics = f" ({', '.join(age_gender)})" if age_gender else ""
+
+        dept_name = apt.department.department if apt.department else "Outpatient Clinic"
+        app_time = apt.appointment_time.strftime("%I:%M %p") if apt.appointment_time else "TBD"
+        app_date = str(apt.appointment_date)
+        app_type = apt.appointment_type.appointment_type if apt.appointment_type else "Consultation"
+
+        action_url = f"/healthcare/appointments/{apt.id}"
+
+        if is_reassignment:
+            event = "patient_reassigned"
+            subject = f"[PATIENT REASSIGNED] {patient_name} reassigned to your schedule"
+            message = (
+                f"Patient {patient_name}{demographics} (ID: {patient_id}) has been REASSIGNED to you.\n"
+                f"Appointment Type: {app_type}\n"
+                f"Date & Time: {app_date} at {app_time}\n"
+                f"Department: {dept_name}\n"
+                f"Status: {apt.status}"
+            )
+        else:
+            event = "patient_assigned"
+            subject = f"[NEW PATIENT ASSIGNMENT] {patient_name} scheduled with you"
+            message = (
+                f"A patient has been assigned to your clinical schedule.\n"
+                f"Patient: {patient_name}{demographics} (ID: {patient_id})\n"
+                f"Appointment Type: {app_type}\n"
+                f"Date & Time: {app_date} at {app_time}\n"
+                f"Department: {dept_name}\n"
+                f"Status: {apt.status}"
+            )
+
+        try:
+            from apps.roles.notification_dispatcher import dispatch_notification
+            dispatch_notification(
+                event=event,
+                subject=subject,
+                message=message,
+                reference_doctype="PatientAppointment",
+                reference_name=str(apt.id),
+                triggered_by=self.request.user if hasattr(self, "request") and self.request and self.request.user.is_authenticated else None,
+                direct_recipients=[practitioner.user],
+                action_url=action_url,
+                category="clinical",
+            )
+        except Exception as e:
+            logger.warning(f"Error dispatching appointment assignment notification: {e}")
+
+        # Realtime notification
+        try:
+            from .realtime import publish_realtime_event
+            publish_realtime_event(
+                event_type=event,
+                data={
+                    "title": subject,
+                    "message": message,
+                    "appointment_id": apt.id,
+                    "patient_id": patient.id if patient else None,
+                    "patient_name": patient_name,
+                    "appointment_date": app_date,
+                    "appointment_time": app_time,
+                    "department": dept_name,
+                    "action_url": action_url,
+                    "timestamp": timezone.now().isoformat(),
+                },
+                user_id=practitioner.user.id,
+            )
+        except Exception as e:
+            logger.warning(f"Error publishing realtime appointment event: {e}")
 
     # ── Workflow Actions ─────────────────────────────────────────────────
 
@@ -621,10 +1166,48 @@ class DiagnosisCatalogViewSet(HealthcareModelViewSet):
 
 
 class DiagnosisViewSet(HealthcareModelViewSet):
-    queryset = Diagnosis.objects.select_related("encounter").all()
+    queryset = Diagnosis.objects.select_related("encounter", "encounter__patient").all()
     serializer_class = DiagnosisSerializer
     search_fields = ["diagnosis", "diagnosis_code"]
-    filterset_fields = ["encounter", "status", "is_primary"]
+    filterset_fields = ["encounter", "status", "is_primary", "is_confidential"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists, Lab Techs, Pharmacists never access clinical diagnoses directly
+        if (is_receptionist(user) or is_lab_tech(user) or is_pharmacist(user)) and not is_doctor(user):
+            return qs.none()
+
+        # Healthcare Admins (non-doctors) cannot view confidential diagnoses
+        if is_healthcare_admin(user) and not is_doctor(user):
+            return qs.filter(is_confidential=False)
+
+        # For doctors: exclude confidential diagnoses of patients without active care relationship
+        if is_doctor(user):
+            practitioner = get_practitioner_for_user(user)
+            if practitioner:
+                from .models import PatientAppointment, PatientEncounter, InpatientRecord
+                care_patient_ids = set(
+                    PatientAppointment.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    PatientEncounter.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    InpatientRecord.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                )
+                qs = qs.filter(
+                    Q(is_confidential=False) |
+                    Q(encounter__patient_id__in=care_patient_ids) |
+                    Q(encounter__practitioner=practitioner)
+                )
+            else:
+                qs = qs.filter(is_confidential=False)
+
+        return qs
 
 
 class SymptomViewSet(HealthcareModelViewSet):
@@ -642,6 +1225,70 @@ class PatientEncounterViewSet(HealthcareModelViewSet):
     search_fields = ["patient__patient_name", "practitioner__practitioner_name"]
     filterset_fields = ["status", "patient", "practitioner", "department",
                         "encounter_date"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists, Lab Techs, Pharmacists cannot view patient encounter lists
+        if (is_receptionist(user) or is_lab_tech(user) or is_pharmacist(user)) and not (is_doctor(user) or is_healthcare_admin(user)):
+            return qs.none()
+
+        # Healthcare Admins (non-doctors) can only monitor non-confidential encounters
+        if is_healthcare_admin(user) and not is_doctor(user):
+            return qs.filter(is_confidential=False)
+
+        # Doctors: only see encounters where they are the treating clinician or have active care relationship
+        if is_doctor(user) and not user.is_superuser:
+            practitioner = get_practitioner_for_user(user)
+            if practitioner:
+                from .models import PatientAppointment, InpatientRecord
+                care_patient_ids = set(
+                    PatientAppointment.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    InpatientRecord.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                )
+                if practitioner.department_id:
+                    care_patient_ids |= set(
+                        PatientAppointment.objects.filter(
+                            department_id=practitioner.department_id,
+                            status__in=["Scheduled", "Checked In", "In Consultation"]
+                        ).values_list("patient_id", flat=True)
+                    )
+                qs = qs.filter(
+                    Q(practitioner=practitioner) | Q(patient_id__in=care_patient_ids)
+                )
+            else:
+                return qs.none()
+
+            params = getattr(self.request, "query_params", getattr(self.request, "GET", {}))
+            my_encounters = params.get("my_encounters")
+            if my_encounters in ["true", "1", "True"] and practitioner:
+                qs = qs.filter(practitioner=practitioner)
+
+        return qs
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        try:
+            obj = queryset.get(**filter_kwargs)
+        except queryset.model.DoesNotExist:
+            # If the record exists in the system but was excluded from the user's care relationship/permissions
+            if PatientEncounter.objects.filter(**filter_kwargs).exists():
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied(
+                    "Access Denied: You do not have an active care relationship with this patient or authorization to view this encounter."
+                )
+            from rest_framework.exceptions import NotFound
+            raise NotFound("No PatientEncounter matches the given query.")
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     @action(detail=False, methods=["get"])
     def meta(self, request):
@@ -718,6 +1365,20 @@ class DrugPrescriptionViewSet(HealthcareModelViewSet):
     search_fields = ["medication_name", "patient__patient_name"]
     filterset_fields = ["patient", "practitioner", "status", "encounter"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists and Lab Techs cannot view drug prescriptions
+        if (is_receptionist(user) or is_lab_tech(user)) and not (is_doctor(user) or is_pharmacist(user) or is_healthcare_admin(user)):
+            return qs.none()
+
+        return qs
+
 
 class MedicationRequestViewSet(HealthcareModelViewSet):
     queryset = MedicationRequest.objects.select_related(
@@ -727,12 +1388,32 @@ class MedicationRequestViewSet(HealthcareModelViewSet):
     search_fields = ["medication_name", "patient__patient_name", "request_id"]
     filterset_fields = ["patient", "practitioner", "encounter", "status", "intent", "priority", "warehouse"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists and Lab Techs cannot view medication requests
+        if (is_receptionist(user) or is_lab_tech(user)) and not (is_doctor(user) or is_pharmacist(user) or is_healthcare_admin(user)):
+            return qs.none()
+
+        return qs
+
     @action(detail=True, methods=["post"])
     def dispense(self, request, pk=None):
         """
         Dispense medication for this prescription from a chosen pharmacy warehouse.
         Creates PharmacyStockEntry in apps.healthcare and deducts PharmacyStock.
         """
+        if not (is_pharmacist(request.user) or request.user.is_superuser or is_healthcare_admin(request.user)):
+            return Response(
+                {"detail": "Permission denied: Only authorized pharmacy personnel may dispense medication orders."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         med_req = self.get_object()
         warehouse_id = request.data.get("warehouse_id") or request.data.get("warehouse") or (med_req.warehouse_id if med_req.warehouse else None)
         warehouse = None
@@ -831,9 +1512,29 @@ class LabTestViewSet(HealthcareModelViewSet):
         "date": ["exact"],
     }
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists and Pharmacists cannot view lab tests
+        if (is_receptionist(user) or is_pharmacist(user)) and not (is_doctor(user) or is_lab_tech(user) or is_healthcare_admin(user)):
+            return qs.none()
+
+        return qs
+
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
         """Marley's `on_submit`: validate, stamp, complete the order."""
+        if not (is_lab_tech(request.user) or request.user.is_superuser or is_healthcare_admin(request.user)):
+            return Response(
+                {"detail": "Permission denied: Only authorized laboratory technicians may submit and verify laboratory test results."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         test = self.get_object()
         if test.status != "Draft":
             raise ValidationError("Only a Draft Lab Test can be submitted.")
@@ -2218,18 +2919,8 @@ class PharmacyViewSet(viewsets.ViewSet):
             notes=data.get("notes") or f"Dispensed {len(items)} items for {patient_name}."
         )
 
-        payment_method = data.get("payment_method") or "Cash"
+        payment_method = data.get("payment_method") or "Free Staff Benefit"
         payment_record = None
-        if patient:
-            payment_record = HealthcarePaymentRecord.objects.create(
-                patient=patient,
-                user=request.user if request.user.is_authenticated else None,
-                amount=total_amount,
-                amount_with_gst=total_amount,
-                status="Completed" if payment_method != "Bill Later" else "Pending",
-                payment_for_doctype="PharmacyStockEntry",
-                payment_for_document=stock_entry.entry_number,
-            )
 
         return Response({
             "message": f"Successfully dispensed {len(items)} medications for {patient_name}.",
@@ -2677,11 +3368,50 @@ class ObservationViewSet(HealthcareModelViewSet):
 
 class ClinicalNoteViewSet(HealthcareModelViewSet):
     queryset = ClinicalNote.objects.select_related(
-        "encounter", "author"
+        "encounter", "author", "encounter__patient"
     ).all()
     serializer_class = ClinicalNoteSerializer
     search_fields = ["note_content"]
-    filterset_fields = ["encounter", "note_type"]
+    filterset_fields = ["encounter", "note_type", "is_confidential"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.is_superuser:
+            return qs
+
+        # Receptionists, Lab Techs, Pharmacists never view clinical notes
+        if (is_receptionist(user) or is_lab_tech(user) or is_pharmacist(user)) and not is_doctor(user):
+            return qs.none()
+
+        # Healthcare Admins (non-doctors) cannot view confidential clinical notes
+        if is_healthcare_admin(user) and not is_doctor(user):
+            return qs.filter(is_confidential=False)
+
+        # For doctors: exclude confidential notes unless author or has care relationship with patient
+        if is_doctor(user):
+            practitioner = get_practitioner_for_user(user)
+            if practitioner:
+                from .models import PatientAppointment, PatientEncounter, InpatientRecord
+                care_patient_ids = set(
+                    PatientAppointment.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    PatientEncounter.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                ) | set(
+                    InpatientRecord.objects.filter(practitioner=practitioner).values_list("patient_id", flat=True)
+                )
+                qs = qs.filter(
+                    Q(is_confidential=False) |
+                    Q(author=practitioner) |
+                    Q(encounter__practitioner=practitioner) |
+                    Q(encounter__patient_id__in=care_patient_ids)
+                )
+            else:
+                qs = qs.filter(is_confidential=False)
+
+        return qs
 
 
 # ── Settings & Fee ─────────────────────────────────────────────────────────
@@ -3647,15 +4377,15 @@ class HealthcareDashboardViewSet(viewsets.ViewSet):
     def analytics(self, request):
         today = timezone.now().date()
 
-        # Core Metrics
+        # Core Metrics (EEU Staff Outpatient Clinic)
         total_patients = Patient.objects.count()
-        inpatient_patients = Patient.objects.filter(inpatient_status=True).count()
+        inpatient_patients = 0
         total_practitioners = HealthcarePractitioner.objects.count()
         total_encounters = PatientEncounter.objects.count()
         total_lab_tests = LabTest.objects.count()
-        total_inpatients = InpatientRecord.objects.count()
-        total_therapy = TherapyPlan.objects.count()
-        total_claims = InsuranceClaim.objects.count()
+        total_inpatients = 0
+        total_therapy = 0
+        total_claims = 0
         total_prescriptions = DrugPrescription.objects.count()
         total_med_requests = MedicationRequest.objects.count()
         total_vitals = VitalSigns.objects.count()
@@ -3745,19 +4475,9 @@ class HealthcareDashboardViewSet(viewsets.ViewSet):
             for l in LabTest.objects.select_related("patient", "practitioner", "template").order_by("-id")[:6]
         ]
 
-        # Inpatients
-        inpatient_statuses = list(InpatientRecord.objects.values("status").annotate(count=Count("id")).order_by("-count"))
-        recent_inpatients = [
-            {
-                "id": i.id,
-                "record_id": i.record_id or f"INP-{i.id}",
-                "patient_name": i.patient.patient_name if i.patient else "Patient",
-                "admission_date": str(i.admission_date) if i.admission_date else "",
-                "status": i.status or "Admitted",
-                "chief_complaint": i.chief_complaint or "Observation & Care",
-            }
-            for i in InpatientRecord.objects.select_related("patient").order_by("-id")[:6]
-        ]
+        # Inpatients (Disabled for EEU clinic)
+        inpatient_statuses = []
+        recent_inpatients = []
 
         # Vitals with interpretation
         recent_vitals_qs = VitalSigns.objects.select_related("patient").order_by("-signs_date", "-id")[:6]
@@ -4430,7 +5150,7 @@ class EEUWorkplaceIncidentViewSet(HealthcareModelViewSet):
         else:
             fitness_state = "Unfit for Work / School"
             
-        clinic_branch = request.data.get("eeu_clinic_branch", "Head Office Central Clinic")
+        clinic_branch = request.data.get("eeu_clinic_branch", "Ethiopian Electric Utility Medium Clinic")
         
         slip = MedicalLeaveSlip.objects.create(
             patient=incident.patient,

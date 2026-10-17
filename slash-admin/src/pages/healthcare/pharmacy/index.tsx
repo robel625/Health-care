@@ -10,7 +10,7 @@ import { Chart, useChart } from "@/components/chart";
 import PharmacyNavHeader from "./components/PharmacyNavHeader";
 import {
   HealthcareApi,
-  type InpatientMedicationEntry,
+  type MedicationRequest,
   type PharmacyDashboardStats,
   type PharmacyStockBalance,
 } from "@/api/services/healthcareService";
@@ -18,22 +18,22 @@ import {
 export default function PharmacyDashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<PharmacyDashboardStats | null>(null);
-  const [recentEntries, setRecentEntries] = useState<InpatientMedicationEntry[]>([]);
+  const [recentRequests, setRecentRequests] = useState<MedicationRequest[]>([]);
   const [lowStockItems, setLowStockItems] = useState<PharmacyStockBalance[]>([]);
   const [loading, setLoading] = useState(false);
-  const [entryFilter, setEntryFilter] = useState<"All" | "Draft" | "Submitted">("All");
+  const [entryFilter, setEntryFilter] = useState<"All" | "Active" | "Completed">("All");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, entriesRes, stockRes] = await Promise.all([
+      const [statsRes, requestsRes, stockRes] = await Promise.all([
         HealthcareApi.pharmacy.dashboardStats().catch(() => null),
-        HealthcareApi.inpatientMedicationEntries.list({ page_size: 10 }).catch(() => ({ results: [] })),
+        HealthcareApi.medicationRequests.list({ page_size: 10 }).catch(() => ({ results: [] })),
         HealthcareApi.pharmacy.stockBalances({ low_stock: true }).catch(() => ({ results: [] })),
       ]);
 
       if (statsRes) setStats(statsRes);
-      setRecentEntries(entriesRes?.results || []);
+      setRecentRequests((requestsRes?.results || requestsRes || []) as MedicationRequest[]);
       setLowStockItems(stockRes?.results || []);
     } catch (err) {
       console.error("Failed to load pharmacy dashboard data:", err);
@@ -96,7 +96,7 @@ export default function PharmacyDashboardPage() {
       data: [32, 45, 52, 48, 64, 58, 42],
     },
     {
-      name: "Inpatient Ward Issues",
+      name: "Prescription Dispatches",
       data: [20, 24, 28, 31, 35, 29, 22],
     },
   ], []);
@@ -134,109 +134,96 @@ export default function PharmacyDashboardPage() {
 
   const categorySeries = useMemo(() => [35, 28, 22, 18, 14, 11], []);
 
-  const filteredEntries = useMemo(() => {
-    if (entryFilter === "All") return recentEntries;
-    return recentEntries.filter((e) => e.status === entryFilter);
-  }, [recentEntries, entryFilter]);
+  const filteredRequests = useMemo(() => {
+    if (entryFilter === "All") return recentRequests;
+    return recentRequests.filter((e) => e.status === entryFilter);
+  }, [recentRequests, entryFilter]);
 
-  const entryColumns: ColumnsType<InpatientMedicationEntry> = [
+  const requestColumns: ColumnsType<MedicationRequest> = [
     {
-      title: "Entry ID",
-      dataIndex: "entry_id",
-      width: 150,
+      title: "Rx Order ID",
+      dataIndex: "request_id",
+      width: 140,
       render: (v: string, r) => (
         <span
           className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1.5"
-          onClick={() => navigate(`/healthcare/pharmacy/medication-entry/${r.id}`)}
+          onClick={() => navigate(`/healthcare/pharmacy/medication-requests`)}
         >
           <Icon icon="solar:document-text-bold-duotone" size={15} />
-          {v || `IME-${r.id}`}
+          {v || `MR-${r.id}`}
         </span>
       ),
     },
     {
-      title: "Patient / Target",
+      title: "Employee / Patient",
       dataIndex: "patient_name",
       render: (v: string) => (
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
-            {v ? v.charAt(0).toUpperCase() : "A"}
+            {v ? v.charAt(0).toUpperCase() : "E"}
           </div>
           <div>
-            <span className="font-semibold text-xs text-foreground block">{v || "All Admitted Patients"}</span>
-            <span className="text-[10px] text-muted-foreground">Inpatient Ward</span>
+            <span className="font-semibold text-xs text-foreground block">{v || "EEU Employee"}</span>
+            <span className="text-[10px] text-muted-foreground">Staff Clinic</span>
           </div>
         </div>
       ),
     },
     {
-      title: "Posting Date",
-      dataIndex: "posting_date",
-      width: 110,
-      render: (v: string) => <span className="text-xs text-muted-foreground">{v}</span>,
+      title: "Prescribed Medication",
+      dataIndex: "medication_name",
+      render: (v: string, r) => (
+        <div>
+          <span className="font-semibold text-xs text-foreground block">{v}</span>
+          <span className="text-[10px] text-muted-foreground">{r.dosage || r.dosage_form || "Standard dosage"}</span>
+        </div>
+      ),
     },
     {
-      title: "Warehouse",
-      dataIndex: "warehouse_name",
-      width: 150,
-      render: (v: string) => (
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <Icon icon="solar:box-minimalistic-bold" size={13} className="text-emerald-500" />
-          {v || "Main Pharmacy"}
-        </span>
-      ),
+      title: "Qty",
+      dataIndex: "quantity",
+      width: 70,
+      align: "center",
+      render: (v: number) => <span className="font-bold text-xs">{v || 1}</span>,
     },
     {
       title: "Status",
       dataIndex: "status",
-      width: 120,
+      width: 110,
       render: (v: string) => {
-        const isSubmitted = v === "Submitted";
-        const isDraft = v === "Draft";
+        const isCompleted = v === "Completed" || v === "Dispensed";
+        const isActive = v === "Active";
         return (
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              isSubmitted
+              isCompleted
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                : isDraft
-                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                : "bg-rose-500/10 text-rose-600 border border-rose-500/20"
+                : isActive
+                ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+                : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isSubmitted ? "bg-emerald-500" : isDraft ? "bg-amber-500" : "bg-rose-500"
+                isCompleted ? "bg-emerald-500" : isActive ? "bg-blue-500" : "bg-amber-500"
               }`}
             />
-            {v}
+            {v || "Active"}
           </span>
         );
       },
     },
     {
-      title: "Stock Voucher",
-      dataIndex: "stock_entry_number",
-      width: 150,
-      render: (v: string) =>
-        v ? (
-          <span className="text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-            {v}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        ),
-    },
-    {
       title: "Actions",
-      width: 90,
+      width: 80,
       align: "center",
-      render: (_, r) => (
+      render: () => (
         <Button
           variant="ghost"
           size="sm"
           className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-          onClick={() => navigate(`/healthcare/pharmacy/medication-entry/${r.id}`)}
-          title="Open Entry Details"
+          onClick={() => navigate(`/healthcare/pharmacy/medication-requests`)}
+          title="Open Prescription Queue"
         >
           <Icon icon="solar:arrow-right-up-bold" size={16} />
         </Button>
@@ -306,7 +293,7 @@ export default function PharmacyDashboardPage() {
     <div className="space-y-6">
       <PharmacyNavHeader
         title="Pharmacy Operations & Clinical Analytics"
-        subtitle="Real-time dispensary monitoring, inpatient medication vouchers, prescription fulfillment, and stock ledgers."
+        subtitle="Real-time dispensary monitoring, EEU staff prescription fulfillment, and stock ledgers."
       />
 
       {/* Low Stock Warning Banner */}
@@ -482,7 +469,7 @@ export default function PharmacyDashboardPage() {
                 Dispensing Throughput & Demand Trends
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Comparison of Outpatient POS Counter vs Inpatient Ward medication entries
+                Comparison of Outpatient POS Counter vs Prescription Fulfillment orders
               </p>
             </div>
             <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300 dark:border-emerald-800">
@@ -523,7 +510,7 @@ export default function PharmacyDashboardPage() {
 
       {/* Operations Grid: Recent Inpatient Entries (2 Cols) + Quick Actions & Watchlist (1 Col) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Inpatient Medication Entries */}
+        {/* Recent EEU Prescriptions */}
         <div className="lg:col-span-2 space-y-4">
           <Card className="border-border/70 shadow-xs">
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
@@ -533,17 +520,17 @@ export default function PharmacyDashboardPage() {
                 </div>
                 <div>
                   <CardTitle className="text-base font-bold">
-                    Recent Inpatient Medication Orders
+                    Recent Staff Prescriptions & Medication Requests
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    Ward medication administration and stock issuance records
+                    Doctor prescriptions queue and dispensary fulfillment tracking
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="flex items-center bg-muted/70 p-0.5 rounded-lg text-xs">
-                  {(["All", "Draft", "Submitted"] as const).map((filter) => (
+                  {(["All", "Active", "Completed"] as const).map((filter) => (
                     <button
                       key={filter}
                       type="button"
@@ -562,7 +549,7 @@ export default function PharmacyDashboardPage() {
                   variant="outline"
                   size="sm"
                   className="text-xs h-8"
-                  onClick={() => navigate("/healthcare/pharmacy/medication-entry")}
+                  onClick={() => navigate("/healthcare/pharmacy/medication-requests")}
                 >
                   View All
                 </Button>
@@ -570,8 +557,8 @@ export default function PharmacyDashboardPage() {
             </CardHeader>
             <CardContent className="p-0">
               <Table
-                columns={entryColumns}
-                dataSource={filteredEntries}
+                columns={requestColumns}
+                dataSource={filteredRequests}
                 rowKey="id"
                 pagination={false}
                 loading={loading}
@@ -630,15 +617,15 @@ export default function PharmacyDashboardPage() {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-3 h-12 text-left hover:border-purple-500/40 transition-all"
-                onClick={() => navigate("/healthcare/pharmacy/medication-entry/new")}
+                onClick={() => navigate("/healthcare/pharmacy/medication-requests")}
               >
                 <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 shrink-0">
-                  <Icon icon="solar:clipboard-add-bold" size={18} />
+                  <Icon icon="solar:pill-bold" size={18} />
                 </div>
                 <div className="truncate">
-                  <p className="text-xs font-semibold leading-tight">New Inpatient Medication Entry</p>
+                  <p className="text-xs font-semibold leading-tight">Prescriptions Queue</p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    Dispense ward dosage & issue stock voucher
+                    Review & dispense doctor prescriptions
                   </p>
                 </div>
               </Button>

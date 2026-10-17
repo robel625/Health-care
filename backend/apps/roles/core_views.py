@@ -546,6 +546,15 @@ class CommentViewSet(viewsets.ModelViewSet):
         ref_name = self.request.query_params.get("reference_name")
         if ref_doctype and ref_name:
             qs = qs.filter(reference_doctype=ref_doctype, reference_name=ref_name)
+        else:
+            user = self.request.user
+            if user and user.is_authenticated:
+                from apps.roles.permissions import _get_user_role_names
+                user_roles = set(_get_user_role_names(user))
+                admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+                is_admin = user.is_staff or user.is_superuser or bool(user_roles & admin_roles)
+                if not is_admin:
+                    qs = qs.filter(Q(owner=user.username) | Q(reference_owner=user.username))
         return qs
 
     def perform_create(self, serializer):
@@ -625,6 +634,26 @@ class CommunicationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Communication.objects.prefetch_related("timeline_links").all()
+        user = self.request.user
+        if not (user and user.is_authenticated):
+            return Communication.objects.none()
+
+        from apps.roles.permissions import _get_user_role_names
+        user_roles = set(_get_user_role_names(user))
+        admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+        is_admin = user.is_staff or user.is_superuser or bool(user_roles & admin_roles)
+
+        if not is_admin:
+            user_email = user.email or ""
+            qs = qs.filter(
+                Q(user=user)
+                | Q(owner=user.username)
+                | Q(sender=user_email)
+                | Q(recipients__icontains=user_email)
+                | Q(recipients__icontains=user.username)
+                | Q(cc__icontains=user_email)
+            )
+
         ref_doctype = self.request.query_params.get("reference_doctype")
         ref_name = self.request.query_params.get("reference_name")
         if ref_doctype and ref_name:
@@ -772,15 +801,40 @@ class CommunicationViewSet(viewsets.ModelViewSet):
         })
 
 
+class IsHealthcareOrSystemAdmin(IsAuthenticated):
+    """
+    Allows access only to Healthcare Administrator, System Manager, or Django staff/superusers.
+    """
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        from apps.roles.permissions import _get_user_role_names
+        user_roles = set(_get_user_role_names(request.user))
+        admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+        return bool(user_roles & admin_roles)
+
+
 # ── ErrorLog ViewSet ──────────────────────────────────────────────
 class ErrorLogViewSet(viewsets.ModelViewSet):
     serializer_class = ErrorLogSerializer
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsHealthcareOrSystemAdmin]
     search_fields = ["method", "error"]
     filterset_fields = ["seen", "reference_doctype"]
 
     def get_queryset(self):
-        return ErrorLog.objects.all()
+        user = self.request.user
+        if not (user and user.is_authenticated):
+            return ErrorLog.objects.none()
+        if user.is_staff or user.is_superuser:
+            return ErrorLog.objects.all()
+        from apps.roles.permissions import _get_user_role_names
+        user_roles = set(_get_user_role_names(user))
+        admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+        if bool(user_roles & admin_roles):
+            return ErrorLog.objects.all()
+        return ErrorLog.objects.none()
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -1397,6 +1451,8 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
     channel_display = serializers.CharField(source="get_channel_display", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     triggered_by_name = serializers.CharField(source="triggered_by.username", read_only=True, default="")
+    action_url = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
 
     class Meta:
         model = NotificationDelivery
@@ -1405,6 +1461,7 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
             "channel", "channel_display", "status", "status_display",
             "recipient", "recipient_name",
             "reference_doctype", "reference_name",
+            "category", "action_url",
             "triggered_by", "triggered_by_name",
             "email_sent", "email_sent_at",
             "creation", "read_at",
@@ -1414,19 +1471,78 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
     def get_event_display(self, obj):
         return obj.event.replace("_", " ").title()
 
+    def get_action_url(self, obj):
+        if getattr(obj, "action_url", ""):
+            return obj.action_url
+        if not obj.reference_doctype:
+            return ""
+        norm = obj.reference_doctype.replace(" ", "").lower()
+        ref = obj.reference_name or ""
+        if norm in ["patientappointment", "appointment"]:
+            return f"/healthcare/appointments/{ref}" if ref else "/healthcare/appointments"
+        if norm in ["labtest", "labresult"]:
+            return f"/healthcare/lab-tests/{ref}" if ref else "/healthcare/lab-tests"
+        if norm in ["patientencounter", "encounter"]:
+            return f"/healthcare/encounters/{ref}" if ref else "/healthcare/encounters"
+        if norm in ["patient"]:
+            return f"/healthcare/patients/{ref}" if ref else "/healthcare/patients"
+        if norm in ["drugprescription", "prescription"]:
+            return "/healthcare/prescriptions"
+        if norm in ["errorlog"]:
+            return "/erp/error-logs"
+        return ""
+
+    def get_category(self, obj):
+        cat = getattr(obj, "category", "")
+        if cat:
+            return cat
+        if obj.event in ["error_log_created", "system_error", "scheduled_job_failure"] or obj.status == "failed":
+            return "errors"
+        if obj.event in ["communication_received"]:
+            return "messages"
+        if obj.event in ["comment_added"]:
+            return "comments"
+        return "clinical"
+
 
 class NotificationDeliveryViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationDeliverySerializer
     permission_classes = [IsAuthenticated]
     search_fields = ["subject", "message", "recipient_name"]
-    filterset_fields = ["event", "channel", "status", "recipient"]
+    filterset_fields = ["event", "channel", "status", "recipient", "category"]
 
     def get_queryset(self):
-        qs = NotificationDelivery.objects.all()
-        # Non-admins only see their own notifications
-        if not (self.request.user.is_staff or self.request.user.is_superuser):
-            qs = qs.filter(recipient=self.request.user)
-        return qs
+        user = self.request.user
+        if not (user and user.is_authenticated):
+            return NotificationDelivery.objects.none()
+
+        from apps.roles.permissions import _get_user_role_names
+        user_roles = set(_get_user_role_names(user))
+        admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+        is_admin = user.is_staff or user.is_superuser or bool(user_roles & admin_roles)
+
+        query_params = getattr(self.request, "query_params", getattr(self.request, "GET", {}))
+        category = query_params.get("category", "").lower()
+
+        if is_admin:
+            qs = NotificationDelivery.objects.all()
+            if category == "errors":
+                qs = qs.filter(
+                    Q(status="failed")
+                    | Q(category="errors")
+                    | Q(event__in=["error_log_created", "system_error", "scheduled_job_failure"])
+                )
+            elif category and category != "all":
+                qs = qs.filter(category=category)
+            return qs
+        else:
+            # Non-admins: STRICTLY scoped to their assigned notifications
+            if category == "errors":
+                return NotificationDelivery.objects.none()
+            qs = NotificationDelivery.objects.filter(recipient=user)
+            if category and category != "all":
+                qs = qs.filter(category=category)
+            return qs
 
     @action(detail=True, methods=["post"])
     def mark_read(self, request, pk=None):
@@ -1754,59 +1870,75 @@ def send_notification_email(request):
 @permission_classes([IsAuthenticated])
 def notification_counts(request):
     """
-    Return unread/notification counts for sidebar badges.
-    Mirrors Frappe's notification count system.
+    Return unread/notification counts for sidebar badges, scoped strictly by role.
     """
     from django.db.models import Q
     from django.utils import timezone
     from datetime import timedelta
+    from apps.roles.permissions import _get_user_role_names
 
     user = request.user
     counts = {}
 
-    # Error logs (last 24h)
+    user_roles = set(_get_user_role_names(user))
+    admin_roles = {"System Manager", "Administrator", "Healthcare Administrator"}
+    is_admin = user.is_staff or user.is_superuser or bool(user_roles & admin_roles)
+
     since_24h = timezone.now() - timedelta(hours=24)
-    counts["error_logs"] = ErrorLog.objects.filter(
-        creation__gte=since_24h
-    ).count()
-
-    # Pending workflow actions (assigned to user's roles)
-    user_role_names = list(
-        HasRole.objects.filter(user=user, role__is_active=True)
-        .values_list("role__name", flat=True)
-    )
-    counts["workflow_actions"] = WorkflowAction.objects.filter(
-        status="Pending"
-    ).filter(
-        Q(permitted_roles__role__in=user_role_names) | Q(permitted_roles__role="System Manager")
-    ).distinct().count()
-
-    # Unread communications (last 7 days)
     since_7d = timezone.now() - timedelta(days=7)
-    counts["communications"] = Communication.objects.filter(
-        creation__gte=since_7d
-    ).exclude(
-        communication_type="Chat"
-    ).count()
 
-    # Active error logs total
-    counts["error_logs_total"] = ErrorLog.objects.count()
+    if is_admin:
+        # Healthcare Administrator sees Errors, System failures, and Admin notifications
+        counts["error_logs"] = ErrorLog.objects.filter(creation__gte=since_24h).count()
+        counts["error_logs_total"] = ErrorLog.objects.count()
+        counts["job_failures"] = (
+            ScheduledJobLog.objects.filter(
+                status="Failure",
+                scheduled_job_type__last_execution__gte=since_24h
+            ).count() if ScheduledJobLog.objects.exists() else 0
+        )
+        counts["failed_deliveries"] = NotificationDelivery.objects.filter(status="failed").count()
+        counts["unread_notifications"] = NotificationDelivery.objects.filter(
+            recipient=user, status__in=["sent", "delivered"]
+        ).count()
+        counts["communications"] = 0
+        counts["comments"] = 0
+        counts["workflow_actions"] = WorkflowAction.objects.filter(status="Pending").count()
+    else:
+        # Non-admins: No access to system errors or failed jobs
+        counts["error_logs"] = 0
+        counts["error_logs_total"] = 0
+        counts["job_failures"] = 0
+        counts["failed_deliveries"] = 0
 
-    # Scheduled job logs (failed, last 24h)
-    counts["job_failures"] = ScheduledJobLog.objects.filter(
-        status="Failure",
-        scheduled_job_type__last_execution__gte=since_24h
-    ).count() if ScheduledJobLog.objects.exists() else 0
+        # Unread notifications delivered to this specific user
+        counts["unread_notifications"] = NotificationDelivery.objects.filter(
+            recipient=user, status__in=["sent", "delivered"]
+        ).count()
 
-    # New comments (last 24h)
-    counts["comments"] = Comment.objects.filter(
-        creation__gte=since_24h
-    ).count()
+        # Messages (Communications)
+        user_email = user.email or ""
+        counts["communications"] = Communication.objects.filter(
+            creation__gte=since_7d
+        ).filter(
+            Q(user=user)
+            | Q(recipients__icontains=user_email)
+            | Q(recipients__icontains=user.username)
+        ).exclude(communication_type="Chat").exclude(read_by_recipient=True).count()
 
-    # Unread notification deliveries for this user
-    counts["unread_notifications"] = NotificationDelivery.objects.filter(
-        recipient=user, status__in=["sent", "delivered"]
-    ).count()
+        # Comments on user's documents
+        counts["comments"] = Comment.objects.filter(
+            creation__gte=since_24h
+        ).filter(
+            Q(owner=user.username) | Q(reference_owner=user.username)
+        ).count()
+
+        # Pending workflow actions assigned to user's roles
+        counts["workflow_actions"] = WorkflowAction.objects.filter(
+            status="Pending"
+        ).filter(
+            Q(permitted_roles__role__in=list(user_roles))
+        ).distinct().count()
 
     return Response(counts)
 

@@ -18,6 +18,8 @@ export type NavItemDataProps = {
 	badge?: number | string;
 	caption?: string;
 	auth?: string[];
+	roles?: string[];
+	excludeRoles?: string[];
 	children?: NavItemDataProps[];
 } & NavItemStateProps;
 
@@ -41,6 +43,8 @@ export type NavGroupProps = Omit<NavListProps, "data" | "depth"> & {
 	name?: string;
 	items: NavItemDataProps[];
 	defaultOpen?: boolean;
+	roles?: string[];
+	excludeRoles?: string[];
 };
 
 /**
@@ -52,5 +56,7 @@ export type NavProps = React.ComponentProps<"nav"> &
 			name?: string;
 			items: NavItemDataProps[];
 			defaultOpen?: boolean;
+			roles?: string[];
+			excludeRoles?: string[];
 		}[];
 	};

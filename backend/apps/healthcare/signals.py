@@ -110,11 +110,11 @@ def on_appointment_saved(sender, instance, created, **kwargs):
         patient_name = instance.patient_name or (instance.patient.patient_name if instance.patient else "Patient")
         practitioner_name = instance.practitioner_name or (instance.practitioner.practitioner_name if instance.practitioner else "Attending Clinician")
 
-        extra_recipients = []
+        direct_recipients = []
         if instance.practitioner and instance.practitioner.user:
-            extra_recipients.append(instance.practitioner.user)
+            direct_recipients.append(instance.practitioner.user)
         if instance.patient and instance.patient.user:
-            extra_recipients.append(instance.patient.user)
+            direct_recipients.append(instance.patient.user)
 
         if created:
             subject = f"[APPOINTMENT BOOKED] {patient_name} with {practitioner_name}"
@@ -126,9 +126,11 @@ def on_appointment_saved(sender, instance, created, **kwargs):
                 event="patient_appointment_created",
                 subject=subject,
                 message=message,
-                reference_doctype="Patient Appointment",
+                reference_doctype="PatientAppointment",
                 reference_name=str(instance.id),
-                extra_recipients=extra_recipients,
+                direct_recipients=direct_recipients if direct_recipients else None,
+                action_url=f"/healthcare/appointments/{instance.id}",
+                category="clinical",
             )
         elif instance.status == "Cancelled":
             subject = f"[APPOINTMENT CANCELLED] {patient_name} ({practitioner_name})"
@@ -140,9 +142,11 @@ def on_appointment_saved(sender, instance, created, **kwargs):
                 event="patient_appointment_cancelled",
                 subject=subject,
                 message=message,
-                reference_doctype="Patient Appointment",
+                reference_doctype="PatientAppointment",
                 reference_name=str(instance.id),
-                extra_recipients=extra_recipients,
+                direct_recipients=direct_recipients if direct_recipients else None,
+                action_url=f"/healthcare/appointments/{instance.id}",
+                category="clinical",
             )
     except Exception as e:
         logger.warning(f"Error dispatching appointment notification: {e}")
@@ -175,9 +179,11 @@ def on_prescription_saved(sender, instance, created, **kwargs):
                 event="prescription_created",
                 subject=subject,
                 message=message,
-                reference_doctype="Drug Prescription",
+                reference_doctype="DrugPrescription",
                 reference_name=str(instance.id),
                 extra_recipients=extra_recipients,
+                action_url="/healthcare/prescriptions",
+                category="clinical",
             )
     except Exception as e:
         logger.warning(f"Error dispatching prescription notification: {e}")
@@ -191,12 +197,6 @@ def on_lab_test_saved(sender, instance, created, **kwargs):
         patient_name = instance.patient.patient_name if instance.patient else "Patient"
         test_name = instance.lab_test_name or "Diagnostic Panel"
 
-        extra_recipients = []
-        if instance.practitioner and instance.practitioner.user:
-            extra_recipients.append(instance.practitioner.user)
-        if instance.patient and instance.patient.user:
-            extra_recipients.append(instance.patient.user)
-
         if created:
             subject = f"[LAB TEST ORDERED] {test_name} for {patient_name}"
             message = (
@@ -207,24 +207,32 @@ def on_lab_test_saved(sender, instance, created, **kwargs):
                 event="lab_test_ordered",
                 subject=subject,
                 message=message,
-                reference_doctype="Lab Test",
+                reference_doctype="LabTest",
                 reference_name=str(instance.id),
-                extra_recipients=extra_recipients,
+                action_url=f"/healthcare/lab-tests/{instance.id}",
+                category="clinical",
             )
         elif instance.status in ["Approved", "Completed"]:
-            subject = f"[LAB RESULT VERIFIED] {test_name} for {patient_name}"
-            message = (
-                f"Pathology laboratory findings for {test_name} ({patient_name}) have been verified "
-                f"and released to electronic health chart."
-            )
-            dispatch_notification(
-                event="lab_test_approved",
-                subject=subject,
-                message=message,
-                reference_doctype="Lab Test",
-                reference_name=str(instance.id),
-                extra_recipients=extra_recipients,
-            )
+            # Dedicated task_notify_lab_result_approved already delivers directly to responsible doctor.
+            # Only dispatch if doctor user exists to prevent broadcast
+            doc_user = instance.practitioner.user if instance.practitioner and instance.practitioner.user else None
+            if doc_user:
+                subject = f"[LAB RESULT VERIFIED] {test_name} for {patient_name}"
+                message = (
+                    f"Pathology laboratory findings for {test_name} ({patient_name}) have been verified "
+                    f"and released to electronic health chart.\n"
+                    f"View Results: /healthcare/lab-tests/{instance.id}"
+                )
+                dispatch_notification(
+                    event="lab_test_approved",
+                    subject=subject,
+                    message=message,
+                    reference_doctype="LabTest",
+                    reference_name=str(instance.id),
+                    direct_recipients=[doc_user],
+                    action_url=f"/healthcare/lab-tests/{instance.id}",
+                    category="clinical",
+                )
     except Exception as e:
         logger.warning(f"Error dispatching lab test notification: {e}")
 

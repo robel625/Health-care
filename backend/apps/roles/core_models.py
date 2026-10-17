@@ -1440,6 +1440,8 @@ class NotificationSetting(models.Model):
         # Healthcare & Clinical Events
         ("patient_appointment_created", "Patient Appointment Scheduled"),
         ("patient_appointment_cancelled", "Patient Appointment Cancelled"),
+        ("patient_assigned", "Patient Assigned to Practitioner"),
+        ("patient_reassigned", "Patient Reassigned to Another Practitioner"),
         ("lab_test_ordered", "Lab Test Ordered"),
         ("lab_test_approved", "Lab Test Approved"),
         ("prescription_created", "Drug Prescription Issued"),
@@ -1551,6 +1553,8 @@ class NotificationSetting(models.Model):
         role_map = {
             "patient_appointment_created": ["Receptionist", "Physician", "Healthcare Administrator"],
             "patient_appointment_cancelled": ["Receptionist", "Physician", "Healthcare Administrator"],
+            "patient_assigned": ["Physician", "Healthcare Administrator"],
+            "patient_reassigned": ["Physician", "Healthcare Administrator"],
             "lab_test_ordered": ["Lab Technician", "Healthcare Administrator"],
             "lab_test_approved": ["Physician", "Nurse", "Healthcare Administrator"],
             "prescription_created": ["Pharmacist", "Healthcare Administrator"],
@@ -1622,6 +1626,8 @@ class NotificationDelivery(models.Model):
     # Source reference
     reference_doctype = models.CharField(max_length=140, blank=True, default="")
     reference_name = models.CharField(max_length=255, blank=True, default="")
+    category = models.CharField(max_length=30, blank=True, default="clinical")
+    action_url = models.CharField(max_length=255, blank=True, default="")
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

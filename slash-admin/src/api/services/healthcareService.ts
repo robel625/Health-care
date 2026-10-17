@@ -74,8 +74,8 @@ export interface Patient {
   // Company Affiliation (EEU / EEP / Contractor)
   company?: number | null;
   company_name?: string;
-  company_affiliation?: "Ethiopian Electric Utility (EEU)" | "Ethiopian Electric Power (EEP)" | "Contractor / Other" | string;
-  employer_code?: "EEU" | "EEP" | "others" | string;
+  company_affiliation?: "Ethiopian Electric Utility (EEU)" | "Ethiopian Electric Football club (EEFC)" | "Retired Employee" | "Others" | string;
+  employer_code?: "EEU" | "EEFC" | "RET" | "others" | string;
   // EEU / EEP Occupational & Staff Details
   eeu_staff_id?: string;
   eeu_department?: string;
@@ -100,6 +100,16 @@ export interface Patient {
   modified?: string;
   owner?: string;
   modified_by?: string;
+  has_confidential_records?: boolean;
+  access_scope?: {
+    can_view_clinical?: boolean;
+    has_care_relationship?: boolean;
+    can_view_confidential?: boolean;
+    is_receptionist?: boolean;
+    is_pharmacist?: boolean;
+    is_lab_tech?: boolean;
+    is_admin?: boolean;
+  };
 }
 
 export interface PatientRelation {
@@ -129,6 +139,7 @@ export interface HealthcarePractitioner {
   department: number | null;
   department_name: string;
   designation: string;
+  eeu_staff_id?: string;
   mobile_phone: string;
   residence_phone?: string;
   office_phone?: string;
@@ -812,7 +823,7 @@ export interface OutpatientDispensePayload {
   patient_id?: number | null;
   patient_name?: string;
   warehouse_id: number;
-  payment_method: "Cash" | "Card" | "Insurance" | "Mobile Money" | "Bill Later";
+  payment_method: "Free Staff Benefit" | "Cash" | "Card" | "Insurance" | "Mobile Money" | "Bill Later" | string;
   items: OutpatientDispenseItem[];
   notes?: string;
 }
@@ -1873,6 +1884,29 @@ export const HealthcareApi = {
     invoiceRegistration: (id: number) =>
       apiClient.post<{ message: string; patient_status: string; patient_id: string }>({
         url: `/healthcare/patients/${id}/invoice_registration/`,
+      }),
+    bulkImport: (formData: FormData, dryRun = false) =>
+      apiClient.post<{
+        success?: boolean;
+        dry_run?: boolean;
+        total_rows: number;
+        valid_count?: number;
+        duplicate_count?: number;
+        created_count?: number;
+        error_count?: number;
+        errors: string[];
+        preview?: any[];
+        created_patients?: any[];
+      }>({
+        url: `/healthcare/patients/bulk-import/${dryRun ? "?dry_run=true" : ""}`,
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" },
+      }),
+    downloadTemplateUrl: () => "/api/healthcare/patients/sample-template/",
+    downloadTemplate: () =>
+      apiClient.get<Blob>({
+        url: "/healthcare/patients/sample-template/",
+        responseType: "blob",
       }),
   },
 

@@ -125,7 +125,7 @@ export default function PractitionerDetailPage() {
   const [items, setItems] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<PractitionerSchedule[]>([]);
-  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "billing" | "edit" | "activity">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "edit" | "activity">("overview");
   const [showIdBadgeModal, setShowIdBadgeModal] = useState(false);
 
   // Form State
@@ -164,27 +164,27 @@ export default function PractitionerDetailPage() {
         address: (res as any).address || "",
         department: res.department || null,
         practitioner_type: (res as any).practitioner_type || "Internal",
-        hospital: (res as any).hospital || "Main Referral Hospital",
+        hospital: (res as any).hospital || "EEU Medical Center",
         employee: (res as any).employee || "",
+        eeu_staff_id: res.eeu_staff_id || "",
         user: (res as any).user || null,
-        op_consulting_charge_item: res.op_consulting_charge_item || null,
-        op_consulting_charge: res.op_consulting_charge || 0,
-        inpatient_visit_charge_item: res.inpatient_visit_charge_item || null,
-        inpatient_visit_charge: (res as any).inpatient_visit_charge || 0,
-        enable_free_follow_ups: (res as any).enable_free_follow_ups || false,
-        max_visits: (res as any).max_visits || 0,
-        valid_days: (res as any).valid_days || 0,
+        op_consulting_charge_item: null,
+        op_consulting_charge: 0,
+        inpatient_visit_charge_item: null,
+        inpatient_visit_charge: 0,
+        enable_free_follow_ups: false,
+        max_visits: 0,
+        valid_days: 0,
         status: res.status || "Active",
         image: res.image || "",
       });
 
       // Load practitioner-specific transaction counts & schedules in parallel
-      const [apptRes, encRes, vsRes, rxRes, inptRes, labRes, schedRes] = await Promise.all([
+      const [apptRes, encRes, vsRes, rxRes, labRes, schedRes] = await Promise.all([
         HealthcareApi.appointments.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
         HealthcareApi.encounters.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
         HealthcareApi.vitalSigns.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
         HealthcareApi.prescriptions.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
-        HealthcareApi.inpatientRecords.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
         HealthcareApi.labTests.list({ practitioner: pid, page_size: 1 }).catch(() => ({ count: 0 })),
         HealthcareApi.practitionerSchedules.list({ practitioner: pid, page_size: 50 }).catch(() => ({ results: [] })),
       ]);
@@ -194,7 +194,7 @@ export default function PractitionerDetailPage() {
         encounters: encRes.count || 0,
         vitals: vsRes.count || 0,
         prescriptions: rxRes.count || 0,
-        inpatient: inptRes.count || 0,
+        inpatient: 0,
         labTests: labRes.count || 0,
       });
 
@@ -506,9 +506,9 @@ export default function PractitionerDetailPage() {
                   <span>•</span>
                   <span>{form.hospital || "Main Referral Hospital"}</span>
                   <span>•</span>
-                  <span className="font-mono text-foreground font-bold">
-                    ${Number(practitioner.op_consulting_charge || 0).toFixed(2)} OP / $
-                    {Number((practitioner as any).inpatient_visit_charge || 0).toFixed(2)} IP
+                  <span className="inline-flex items-center gap-1 font-mono text-primary font-bold bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
+                    <Icon icon="solar:badge-check-bold" size={12} className="text-primary" />
+                    EEU ID: {practitioner.eeu_staff_id || "EEU-STAFF"}
                   </span>
                 </div>
               </div>
@@ -633,7 +633,6 @@ export default function PractitionerDetailPage() {
         {[
           { id: "overview" as const, label: "Clinical Overview", icon: "solar:widget-2-bold" },
           { id: "schedule" as const, label: `Weekly Schedule (${schedules.length})`, icon: "solar:calendar-bold" },
-          { id: "billing" as const, label: "Tariffs & Billing", icon: "solar:dollar-minimalistic-bold-duotone" },
           { id: "edit" as const, label: "Edit Practitioner Form", icon: "solar:pen-new-square-bold" },
           { id: "activity" as const, label: `Activity & Notes (${activity.length})`, icon: "solar:history-bold" },
         ].map((t) => (
@@ -698,13 +697,17 @@ export default function PractitionerDetailPage() {
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-xl border bg-muted/20 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground">
-                        Staff Affiliation
+                    <div className="p-3 rounded-xl border bg-primary/5 border-primary/20 space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-primary flex items-center gap-1">
+                        <Icon icon="solar:badge-check-bold" size={13} />
+                        EEU Staff Identification
                       </span>
-                      <p className="font-medium text-foreground">
-                        {practitioner.practitioner_type} Staff {form.employee && `(HR: ${form.employee})`}
+                      <p className="font-bold text-sm font-mono text-primary">
+                        {practitioner.eeu_staff_id || "EEU-PENDING"}
                       </p>
+                      <span className="text-[10px] text-muted-foreground block">
+                        EEU Salaried Staff • Tariff & Billing Exempt
+                      </span>
                     </div>
                   </div>
                 </CardContent>
@@ -845,88 +848,7 @@ export default function PractitionerDetailPage() {
             </Card>
           )}
 
-          {/* ════════ TAB 3: Tariffs & Billing ════════ */}
-          {activeTab === "billing" && (
-            <Card className="shadow-xs border-border">
-              <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Icon icon="solar:dollar-minimalistic-bold-duotone" size={17} className="text-amber-600" />
-                  Fee Schedules & Follow-Up Policies
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                  Consultation charges linked to billing items and follow-up validity rules
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-5 space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl border bg-muted/20 space-y-2">
-                    <span className="text-xs font-bold text-foreground block">
-                      Outpatient (OP) Consultation Charge
-                    </span>
-                    <div className="text-2xl font-black font-mono text-foreground">
-                      ${Number(form.op_consulting_charge || 0).toFixed(2)}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Linked Item:{" "}
-                      <span className="font-semibold text-foreground">
-                        {practitioner.op_consulting_charge_item_name || "Standard Consultation"}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border bg-muted/20 space-y-2">
-                    <span className="text-xs font-bold text-foreground block">
-                      Inpatient (IP) Ward Round Charge
-                    </span>
-                    <div className="text-2xl font-black font-mono text-foreground">
-                      ${Number(form.inpatient_visit_charge || 0).toFixed(2)}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Linked Item:{" "}
-                      <span className="font-semibold text-foreground">
-                        {practitioner.inpatient_visit_charge_item_name || "Inpatient Visit Charge"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Free Follow-up Policy Summary */}
-                <div className="p-4 rounded-xl border bg-background space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Icon icon="solar:shield-check-bold" size={15} className="text-emerald-600" />
-                      Complimentary Follow-Up Policy
-                    </span>
-                    <Badge
-                      className={cn(
-                        "text-[10px] font-bold",
-                        form.enable_free_follow_ups
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                          : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {form.enable_free_follow_ups ? "Policy Active" : "No Free Follow-ups"}
-                    </Badge>
-                  </div>
-                  {form.enable_free_follow_ups ? (
-                    <p className="text-xs text-muted-foreground">
-                      Patients are permitted up to{" "}
-                      <strong className="text-foreground font-bold">{form.max_visits || 1}</strong>{" "}
-                      free visit(s) within{" "}
-                      <strong className="text-foreground font-bold">{form.valid_days || 7}</strong>{" "}
-                      days of their initial paid encounter.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Every encounter with this physician requires standard consultation fee billing.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ════════ TAB 4: Edit Details & Credentialing Form ════════ */}
+          {/* ════════ TAB 3: Edit Details & Credentialing Form ════════ */}
           {activeTab === "edit" && (
             <Card className="shadow-xs border-border">
               <CardHeader className="pb-3 border-b bg-muted/20">
@@ -1133,6 +1055,16 @@ export default function PractitionerDetailPage() {
                   </div>
 
                   <div>
+                    <Label className="text-xs font-semibold text-foreground">EEU Staff ID *</Label>
+                    <Input
+                      value={form.eeu_staff_id || ""}
+                      onChange={(e) => setForm({ ...form, eeu_staff_id: e.target.value })}
+                      className="mt-1 h-8 text-xs font-mono font-bold uppercase tracking-wider"
+                      placeholder="e.g. EEU-MD-0821"
+                    />
+                  </div>
+
+                  <div>
                     <Label className="text-xs font-semibold text-muted-foreground">Employee ID (HR)</Label>
                     <Input
                       value={form.employee}
@@ -1142,68 +1074,15 @@ export default function PractitionerDetailPage() {
                   </div>
                 </div>
 
-                {/* Consultation Fees */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="p-3 rounded-xl border bg-muted/20 space-y-2">
-                    <Label className="text-xs font-bold text-foreground">Outpatient (OP) Fee ($)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.op_consulting_charge}
-                      onChange={(e) => setForm({ ...form, op_consulting_charge: parseFloat(e.target.value) || 0 })}
-                      className="h-9 text-xs font-mono font-bold bg-background"
-                    />
+                {/* EEU Enterprise Compensation Notice */}
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                    <Icon icon="solar:shield-check-bold" size={15} />
+                    <span>EEU Salaried Healthcare Practitioner</span>
                   </div>
-
-                  <div className="p-3 rounded-xl border bg-muted/20 space-y-2">
-                    <Label className="text-xs font-bold text-foreground">Inpatient (IP) Fee ($)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.inpatient_visit_charge}
-                      onChange={(e) => setForm({ ...form, inpatient_visit_charge: parseFloat(e.target.value) || 0 })}
-                      className="h-9 text-xs font-mono font-bold bg-background"
-                    />
-                  </div>
-                </div>
-
-                {/* Free Followups */}
-                <div className="p-3.5 rounded-xl border bg-background space-y-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="edit_free_followup"
-                      checked={form.enable_free_follow_ups}
-                      onChange={(e) => setForm({ ...form, enable_free_follow_ups: e.target.checked })}
-                      className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
-                    />
-                    <label htmlFor="edit_free_followup" className="text-xs font-bold text-foreground cursor-pointer">
-                      Enable Free Clinical Follow-Up Encounters
-                    </label>
-                  </div>
-
-                  {form.enable_free_follow_ups && (
-                    <div className="grid grid-cols-2 gap-3 pt-2 border-t">
-                      <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">Valid Days</Label>
-                        <Input
-                          type="number"
-                          value={form.valid_days}
-                          onChange={(e) => setForm({ ...form, valid_days: parseInt(e.target.value) || 0 })}
-                          className="mt-1 h-8 text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold text-muted-foreground">Max Free Encounters</Label>
-                        <Input
-                          type="number"
-                          value={form.max_visits}
-                          onChange={(e) => setForm({ ...form, max_visits: parseInt(e.target.value) || 0 })}
-                          className="mt-1 h-8 text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    All Practitioners & Specialists are salaried Ethiopian Electric Utility (EEU) employees. Consultation tariffs, fee schedules, and individual patient billing charges are completely exempt.
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
@@ -1388,8 +1267,8 @@ export default function PractitionerDetailPage() {
                 ||| | |||| | ||| || ||||| | |||| | |||
               </div>
               <div className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
-                <span>ID: {practitioner.practitioner_id}</span>
-                <span>EXP: 2028-12-31</span>
+                <span>EEU ID: {practitioner.eeu_staff_id || "EEU-STAFF"}</span>
+                <span>EEU SALARIED</span>
               </div>
             </div>
 

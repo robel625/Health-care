@@ -46,7 +46,7 @@ export default function EEUWorkplaceIncidentsPage() {
   const [leaveIncident, setLeaveIncident] = useState<EEUWorkplaceIncident | null>(null);
   const [leaveDays, setLeaveDays] = useState(7);
   const [leaveRestriction, setLeaveRestriction] = useState("Restricted to Light Ground Duty (No Climbing / No Field Patrol)");
-  const [leaveBranch, setLeaveBranch] = useState("Head Office Central Clinic");
+  const [leaveBranch, setLeaveBranch] = useState("Ethiopian Electric Utility Medium Clinic");
   const [leaveRemarks, setLeaveRemarks] = useState("");
   const [leaveSaving, setLeaveSaving] = useState(false);
 
@@ -809,13 +809,7 @@ export default function EEUWorkplaceIncidentsPage() {
                     onChange={(e) => setLeaveBranch(e.target.value)}
                     className="w-full h-9 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="Head Office Central Clinic">Head Office Central Clinic</option>
-                    <option value="Kality Central Depot Clinic">Kality Central Depot Clinic</option>
-                    <option value="Legehar Substation Clinic">Legehar Substation Clinic</option>
-                    <option value="Adama Regional Clinic">Adama Regional Clinic</option>
-                    <option value="Hawassa Regional Clinic">Hawassa Regional Clinic</option>
-                    <option value="Bahir Dar Regional Clinic">Bahir Dar Regional Clinic</option>
-                    <option value="Dire Dawa Regional Clinic">Dire Dawa Regional Clinic</option>
+                    <option value="Ethiopian Electric Utility Medium Clinic">Ethiopian Electric Utility Medium Clinic</option>
                   </select>
                 </div>
               </div>

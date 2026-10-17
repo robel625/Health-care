@@ -44,18 +44,10 @@ export default function DispenseReceiptModal({
       render: (v: number) => <span className="font-bold text-sm">{v}</span>,
     },
     {
-      title: "Unit Price",
-      dataIndex: "unit_price",
-      width: 100,
+      title: "Coverage",
+      width: 140,
       align: "right",
-      render: (v: number) => <span>${Number(v || 0).toFixed(2)}</span>,
-    },
-    {
-      title: "Total",
-      dataIndex: "total",
-      width: 100,
-      align: "right",
-      render: (v: number) => <span className="font-semibold">${Number(v || 0).toFixed(2)}</span>,
+      render: () => <span className="font-semibold text-xs text-emerald-600 dark:text-emerald-400">100% Free (0.00 ETB)</span>,
     },
   ];
 
@@ -106,12 +98,12 @@ export default function DispenseReceiptModal({
               <span className="font-medium text-foreground">{receipt.dispensed_by}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Payment Method:</span>
+              <span className="text-muted-foreground">Coverage:</span>
               <p className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {receipt.payment_method}
+                100% Free EEU Staff Benefit
               </p>
               <span className="text-muted-foreground">Status: </span>
-              <span className="font-semibold text-green-600">PAID & DISPENSED</span>
+              <span className="font-semibold text-emerald-600">DISPENSED (NO CHARGE)</span>
             </div>
           </div>
 
@@ -140,15 +132,15 @@ export default function DispenseReceiptModal({
               <p>• Keep all medicines out of reach of children. Store in a cool, dry place.</p>
             </div>
 
-            <div className="w-full sm:w-56 text-right space-y-1">
+            <div className="w-full sm:w-64 text-right space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Subtotal:</span>
-                <span>${receipt.total_amount.toFixed(2)}</span>
+                <span>Coverage:</span>
+                <span className="text-emerald-600 font-semibold">EEU Staff Benefit</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-foreground border-t pt-1">
-                <span>Total Paid:</span>
+                <span>Patient Total:</span>
                 <span className="text-emerald-600 dark:text-emerald-400">
-                  ${receipt.total_amount.toFixed(2)}
+                  0.00 ETB (FREE)
                 </span>
               </div>
             </div>

@@ -12,9 +12,14 @@ import PharmacyNavHeader from "./components/PharmacyNavHeader";
 import EditMedicationModal from "./components/EditMedicationModal";
 import { HealthcareApi } from "@/api/services/healthcareService";
 import type { DosageForm, MedicationClass } from "@/api/services/healthcareService";
+import {
+  ETHIOPIAN_ESSENTIAL_MEDICINES,
+  ETHIOPIAN_CATEGORIES,
+  type EthiopianMedicine,
+} from "./ethiopianMedicinesData";
 
 export default function PharmacyMedicationsPage() {
-  const [activeTab, setActiveTab] = useState<"catalog" | "interactions" | "checker">("catalog");
+  const [activeTab, setActiveTab] = useState<"catalog" | "eeml" | "interactions" | "checker">("catalog");
 
   // Catalog State
   const [medications, setMedications] = useState<any[]>([]);
@@ -73,6 +78,12 @@ export default function PharmacyMedicationsPage() {
     is_combination: false,
     disabled: false,
   });
+
+  // Ethiopian Essential Medicines List (EEML 2020) State
+  const [eemlSearch, setEemlSearch] = useState("");
+  const [eemlCategory, setEemlCategory] = useState("All");
+  const [eemlAware, setEemlAware] = useState<"All" | "Access" | "Watch" | "Reserve">("All");
+  const [eemlPage, setEemlPage] = useState(1);
 
   // Load Medications
   const loadMedications = useCallback(async () => {
@@ -378,6 +389,148 @@ export default function PharmacyMedicationsPage() {
     },
   ];
 
+  // Filtered Ethiopian Essential Medicines
+  const filteredEeml = useMemo(() => {
+    return ETHIOPIAN_ESSENTIAL_MEDICINES.filter((m) => {
+      if (eemlAware !== "All" && m.aware !== eemlAware) return false;
+      if (eemlCategory !== "All" && m.major_category !== eemlCategory) return false;
+      if (!eemlSearch.trim()) return true;
+      const q = eemlSearch.toLowerCase().trim();
+      return (
+        m.generic_name.toLowerCase().includes(q) ||
+        m.display.toLowerCase().includes(q) ||
+        m.dosage_form_and_strength.toLowerCase().includes(q) ||
+        m.sub_category.toLowerCase().includes(q) ||
+        m.major_category.toLowerCase().includes(q)
+      );
+    });
+  }, [eemlSearch, eemlCategory, eemlAware]);
+
+  const handleAddFromEeml = (med: EthiopianMedicine) => {
+    let dfId: number | null = null;
+    if (med.primary_dosage_form) {
+      const match = dosageForms.find((df) =>
+        df.dosage_form.toLowerCase().includes(med.primary_dosage_form.toLowerCase())
+      );
+      if (match) dfId = match.id;
+    }
+    let mcId: number | null = null;
+    const catMatch = medClasses.find((mc) =>
+      mc.medication_class.toLowerCase().includes(med.major_category.toLowerCase()) ||
+      med.major_category.toLowerCase().includes(mc.medication_class.toLowerCase())
+    );
+    if (catMatch) mcId = catMatch.id;
+
+    setMedForm({
+      generic_name: med.generic_name,
+      strength: med.strength || "",
+      strength_uom: med.strength.toLowerCase().includes("g") && !med.strength.toLowerCase().includes("mg") ? "g" : "mg",
+      dosage_form: dfId,
+      medication_class: mcId,
+      national_drug_code: med.sub_code || med.major_code || "",
+      standard_rate: 1.0,
+      reorder_level: 25,
+      default_prescription_dosage: med.default_dosage || "1-0-1",
+      default_prescription_duration: med.default_period || "7 Days",
+      is_combination: med.generic_name.includes("+"),
+      disabled: false,
+    });
+    setShowMedModal(true);
+    toast.info(`Pre-filled "${med.generic_name}" from Ethiopian Essential Medicines List.`);
+  };
+
+  const eemlColumns: ColumnsType<EthiopianMedicine> = [
+    {
+      title: "#",
+      width: 50,
+      align: "center",
+      render: (_, __, idx) => (
+        <span className="text-[11px] font-mono text-muted-foreground">
+          {(eemlPage - 1) * 20 + idx + 1}
+        </span>
+      ),
+    },
+    {
+      title: "Essential Medicine & Form",
+      dataIndex: "generic_name",
+      width: 260,
+      render: (v: string, r: EthiopianMedicine) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-xs text-foreground">{v}</span>
+            {r.aware && (
+              <Badge
+                className={`text-[9.5px] uppercase font-bold px-1.5 py-0 border ${
+                  r.aware === "Access"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300"
+                    : r.aware === "Watch"
+                    ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300"
+                    : "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/50 dark:text-rose-300"
+                }`}
+              >
+                {r.aware}
+              </Badge>
+            )}
+          </div>
+          <span className="text-[11px] text-muted-foreground block">{r.display}</span>
+        </div>
+      ),
+    },
+    {
+      title: "Category & Classification",
+      dataIndex: "major_category",
+      width: 220,
+      render: (cat: string, r: EthiopianMedicine) => (
+        <div className="space-y-0.5 text-xs">
+          <span className="font-semibold text-foreground text-[11px] block">{cat}</span>
+          <span className="text-muted-foreground text-[10.5px] font-mono">
+            {r.sub_code ? `[${r.sub_code}] ` : ""}{r.sub_category}
+          </span>
+        </div>
+      ),
+    },
+    {
+      title: "Dosage Forms & Strengths (EFDA Official)",
+      dataIndex: "dosage_form_and_strength",
+      render: (v: string) => (
+        <span className="text-xs text-slate-700 dark:text-slate-300 font-mono leading-relaxed block whitespace-pre-wrap">
+          {v}
+        </span>
+      ),
+    },
+    {
+      title: "Primary Regimen",
+      dataIndex: "primary_dosage_form",
+      width: 130,
+      render: (form: string, r: EthiopianMedicine) => (
+        <div className="text-xs space-y-0.5">
+          <Badge variant="outline" className="text-[10px] font-semibold bg-muted/40">
+            {form}
+          </Badge>
+          <span className="text-[10.5px] text-muted-foreground block">
+            {r.default_dosage} · {r.default_period}
+          </span>
+        </div>
+      ),
+    },
+    {
+      title: "Action",
+      width: 140,
+      align: "center",
+      render: (_, r: EthiopianMedicine) => (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs gap-1 border-teal-600/30 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 rounded-lg font-semibold"
+          onClick={() => handleAddFromEeml(r)}
+        >
+          <Icon icon="solar:add-circle-bold" size={13} />
+          Add to Formulary
+        </Button>
+      ),
+    },
+  ];
+
   // Interaction columns
   const interactionColumns: ColumnsType<any> = [
     {
@@ -522,12 +675,14 @@ export default function PharmacyMedicationsPage() {
 
         <div className="p-4 rounded-xl border border-border/70 bg-card shadow-2xs space-y-1">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Therapeutic Classes
+            National EEML Catalog
           </p>
-          <p className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{medClasses.length}</p>
+          <p className="text-2xl font-extrabold text-teal-600 dark:text-teal-400">
+            {ETHIOPIAN_ESSENTIAL_MEDICINES.length}
+          </p>
           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-            <Icon icon="solar:clipboard-bold" size={12} className="text-purple-500" />
-            Classifications & ATC groups
+            <Icon icon="solar:diploma-verified-bold" size={12} className="text-teal-500" />
+            MOH / EFDA 6th Edition (2020)
           </p>
         </div>
 
@@ -563,6 +718,18 @@ export default function PharmacyMedicationsPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab("eeml")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === "eeml"
+                    ? "bg-background text-teal-700 dark:text-teal-400 shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon icon="solar:diploma-verified-bold-duotone" size={15} />
+                Ethiopian Essential List (EEML 2020) ({ETHIOPIAN_ESSENTIAL_MEDICINES.length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab("interactions")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   activeTab === "interactions"
@@ -583,7 +750,7 @@ export default function PharmacyMedicationsPage() {
                 }`}
               >
                 <Icon icon="solar:stethoscope-bold-duotone" size={15} />
-                Clinical Interaction Checker
+                Clinical Checker
               </button>
             </div>
 
@@ -671,7 +838,131 @@ export default function PharmacyMedicationsPage() {
             </div>
           )}
 
-          {/* Tab 2: Drug Interaction Rules */}
+          {/* Tab 2: Ethiopian Essential Medicines List (EEML 2020) */}
+          {activeTab === "eeml" && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl border border-teal-500/30 bg-teal-500/5 dark:bg-teal-950/20 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-teal-600/15 text-teal-700 dark:text-teal-400 flex items-center justify-center font-bold shrink-0">
+                    <Icon icon="solar:diploma-verified-bold-duotone" size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      Ethiopian Essential Medicines List (EEML) — 6th Edition, September 2020
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Standardized formulary catalog established jointly by the Ministry of Health (MOH) and Ethiopian Food and Drug Authority (EFDA).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start md:self-center">
+                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] font-bold">
+                    17 Access
+                  </Badge>
+                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] font-bold">
+                    11 Watch
+                  </Badge>
+                  <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30 text-[10px] font-bold">
+                    8 Reserve
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Filters Toolbar */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-72">
+                    <Input
+                      placeholder="Search EEML name, code, dosage, or strength..."
+                      value={eemlSearch}
+                      onChange={(e) => {
+                        setEemlSearch(e.target.value);
+                        setEemlPage(1);
+                      }}
+                      className="h-9 text-xs pr-8 rounded-lg"
+                    />
+                    {eemlSearch ? (
+                      <button
+                        type="button"
+                        onClick={() => setEemlSearch("")}
+                        className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                      >
+                        <Icon icon="solar:close-circle-bold" size={15} />
+                      </button>
+                    ) : (
+                      <Icon
+                        icon="solar:magnifer-linear"
+                        size={15}
+                        className="absolute right-2.5 top-2.5 text-muted-foreground pointer-events-none"
+                      />
+                    )}
+                  </div>
+
+                  {/* Category Filter */}
+                  <select
+                    className="rounded-lg border border-input bg-background px-3 py-2 text-xs shadow-xs h-9 max-w-[260px]"
+                    value={eemlCategory}
+                    onChange={(e) => {
+                      setEemlCategory(e.target.value);
+                      setEemlPage(1);
+                    }}
+                  >
+                    <option value="All">All Categories (24 Classes)</option>
+                    {ETHIOPIAN_CATEGORIES.map((cat, idx) => (
+                      <option key={idx} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* AWaRe Filter */}
+                  <div className="inline-flex rounded-lg border border-border/60 bg-muted/50 p-0.5 text-xs">
+                    {(["All", "Access", "Watch", "Reserve"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => {
+                          setEemlAware(g);
+                          setEemlPage(1);
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                          eemlAware === g
+                            ? "bg-background text-foreground shadow-2xs font-bold"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <span className="text-xs text-muted-foreground self-start sm:self-center font-medium">
+                  Showing {filteredEeml.length} of {ETHIOPIAN_ESSENTIAL_MEDICINES.length} EEML medicines
+                </span>
+              </div>
+
+              {/* EEML Table */}
+              <Table
+                columns={eemlColumns}
+                dataSource={filteredEeml}
+                rowKey="id"
+                pagination={{
+                  current: eemlPage,
+                  total: filteredEeml.length,
+                  pageSize: 20,
+                  onChange: setEemlPage,
+                  showTotal: (total) => `${total} essential medicines in national list`,
+                }}
+                size="middle"
+                className="[&_.ant-table-thead>tr>th]:bg-transparent"
+              />
+            </div>
+          )}
+
+          {/* Tab 3: Drug Interaction Rules */}
           {activeTab === "interactions" && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
@@ -921,13 +1212,63 @@ export default function PharmacyMedicationsPage() {
 
           <div className="grid grid-cols-2 gap-4 py-2 text-sm">
             <div className="col-span-2">
-              <Label className="text-xs font-semibold text-foreground">Generic / Medication Name *</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">Generic / Medication Name *</Label>
+                <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium">
+                  ⚡ Auto-suggests from 609 Ethiopian Essential Medicines
+                </span>
+              </div>
               <Input
-                placeholder="e.g. Ciprofloxacin HCl"
+                list="eeml-modal-suggestions"
+                placeholder="e.g. Amoxicillin, Ceftriaxone, Metformin..."
                 value={medForm.generic_name}
-                onChange={(e) => setMedForm({ ...medForm, generic_name: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const found = ETHIOPIAN_ESSENTIAL_MEDICINES.find(
+                    (m) =>
+                      m.generic_name.toLowerCase() === val.toLowerCase().trim() ||
+                      m.display.toLowerCase() === val.toLowerCase().trim()
+                  );
+                  if (found) {
+                    let dfId = medForm.dosage_form;
+                    if (found.primary_dosage_form && dosageForms.length > 0) {
+                      const m = dosageForms.find((df) =>
+                        df.dosage_form.toLowerCase().includes(found.primary_dosage_form.toLowerCase())
+                      );
+                      if (m) dfId = m.id;
+                    }
+                    let mcId = medForm.medication_class;
+                    if (medClasses.length > 0) {
+                      const cm = medClasses.find(
+                        (mc) =>
+                          mc.medication_class.toLowerCase().includes(found.major_category.toLowerCase()) ||
+                          found.major_category.toLowerCase().includes(mc.medication_class.toLowerCase())
+                      );
+                      if (cm) mcId = cm.id;
+                    }
+                    setMedForm({
+                      ...medForm,
+                      generic_name: found.generic_name,
+                      strength: found.strength || medForm.strength,
+                      dosage_form: dfId,
+                      medication_class: mcId,
+                      national_drug_code: found.sub_code || found.major_code || medForm.national_drug_code,
+                      default_prescription_dosage: found.default_dosage || medForm.default_prescription_dosage,
+                      default_prescription_duration: found.default_period || medForm.default_prescription_duration,
+                    });
+                  } else {
+                    setMedForm({ ...medForm, generic_name: val });
+                  }
+                }}
                 className="mt-1"
               />
+              <datalist id="eeml-modal-suggestions">
+                {ETHIOPIAN_ESSENTIAL_MEDICINES.slice(0, 300).map((m) => (
+                  <option key={m.id} value={m.generic_name}>
+                    {m.major_category} · {m.strength ? `[${m.strength}]` : ""}
+                  </option>
+                ))}
+              </datalist>
             </div>
 
             <div>

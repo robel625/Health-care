@@ -1,46 +1,76 @@
 /**
- * Age formatting that matches Marley's `Patient.get_age()`:
- *
- *     35 Year(s) 2 Month(s) 11 Day(s)
- *
- * Marley stores this string on the encounter as `patient_age` (a Data field) so
- * the age a visit was recorded at stays historically true. The backend computes
- * and stores it on save; this mirrors the format for live previews in the form
- * before an encounter exists.
+ * Age formatting utility.
+ * Formats patient age showing ONLY the year (omits month and day as per clinical preference).
+ * e.g. "35 Year(s)" or fallback to stored integer age "35 Year(s)".
  */
 
-/** Whole years/months/days elapsed between `dob` and `on` (defaults to today). */
-function elapsed(dob: Date, on: Date) {
+/** Whole years elapsed between `dob` and `on` (defaults to today). */
+function elapsedYears(dob: Date, on: Date): number {
 	let years = on.getFullYear() - dob.getFullYear();
-	let months = on.getMonth() - dob.getMonth();
-	let days = on.getDate() - dob.getDate();
+	const months = on.getMonth() - dob.getMonth();
+	const days = on.getDate() - dob.getDate();
 
-	if (days < 0) {
-		months -= 1;
-		// Days in the calendar month preceding `on`.
-		const daysInPrevMonth = new Date(on.getFullYear(), on.getMonth(), 0).getDate();
-		days += daysInPrevMonth;
-	}
-	if (months < 0) {
+	if (months < 0 || (months === 0 && days < 0)) {
 		years -= 1;
-		months += 12;
 	}
-	return { years, months, days };
+	return Math.max(0, years);
 }
 
 /**
- * Format a patient's age the way Marley does.
- *
- * Prefers `dob` (so the value never goes stale), falling back to a stored
- * integer `age`. Returns "" when neither is available.
+ * Format a patient's age showing ONLY the year (omits month and day).
+ * Prefers `dob` (so the value never goes stale), falling back to a stored integer `age`.
+ * Returns "" when neither is available.
  */
 export function formatAge(dob?: string | null, age?: number | null, on: Date = new Date()): string {
 	if (dob) {
 		const parsed = new Date(dob);
 		if (!Number.isNaN(parsed.getTime())) {
-			const { years, months, days } = elapsed(parsed, on);
-			return `${years} Year(s) ${months} Month(s) ${days} Day(s)`;
+			const years = elapsedYears(parsed, on);
+			return `${years} Year(s)`;
 		}
 	}
-	return age ? `${age} Year(s)` : "";
+	if (age !== undefined && age !== null && age !== ("" as any)) {
+		return `${age} Year(s)`;
+	}
+	return "";
+}
+
+/**
+ * Format a patient's age showing only the year.
+ * Alias to formatAge for backwards compatibility.
+ */
+export function formatAgeYears(dob?: string | null, age?: number | null, on: Date = new Date()): string {
+	return formatAge(dob, age, on);
+}
+
+/**
+ * Strips month and day parts from any age string or number, ensuring ONLY the year is displayed.
+ * Examples:
+ *   "35 Year(s) 2 Month(s) 11 Day(s)" -> "35 Year(s)"
+ *   "28 Years 4 Months"               -> "28 Year(s)"
+ *   "45"                              -> "45 Year(s)"
+ *   45                                -> "45 Year(s)"
+ *   "0 Year(s)"                       -> "0 Year(s)"
+ */
+export function cleanAgeOnlyYears(val?: string | number | null): string {
+	if (val === undefined || val === null) return "";
+	const str = String(val).trim();
+	if (!str) return "";
+
+	// If already a simple number (e.g. "35" or 35)
+	if (/^\d+$/.test(str)) {
+		return `${str} Year(s)`;
+	}
+
+	// Match leading number followed by years/year(s)/yrs/y
+	const match = str.match(/^(\d+)\s*(?:years?\(?s?\)?|yrs?|y)?/i);
+	if (match && match[1] !== undefined) {
+		// If string was solely e.g. "5 Month(s)" with no year, return "0 Year(s)"
+		if (/^\d+\s*(?:month|day)/i.test(str)) {
+			return "0 Year(s)";
+		}
+		return `${match[1]} Year(s)`;
+	}
+
+	return str;
 }

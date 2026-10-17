@@ -2,19 +2,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import { cn } from "@/utils";
 
-interface MultiSelectProps {
+export interface MultiSelectProps {
   /** Choices to offer. Frappe calls these the Link options. */
   options: string[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
   emptyText?: string;
-  /** Offer a "Create «typed»" row for values not already in `options`. */
+  /** Whether to offer creation of new values. Defaults to true. */
   allowCreate?: boolean;
   disabled?: boolean;
   className?: string;
   /** When "large", renders 2 lines tall (~72px) with bold larger text and chips. */
   size?: "default" | "large";
+  /** Optional function to get an external link URL for an option. */
+  getOptionUrl?: (option: string) => string | undefined;
+  /** Linked DocType name, e.g. "Symptom", "Diagnosis". */
+  doctype?: string;
+  /** Optional callback to open a dedicated create modal (e.g. CreateSymptomModal). */
+  onCreateNew?: (initialText?: string) => void;
+  /** Optional callback when an ad-hoc option is added. */
+  onCreateOption?: (newOption: string) => void;
 }
 
 /**
@@ -22,8 +30,7 @@ interface MultiSelectProps {
  * **Table MultiSelect** (e.g. the encounter's Symptoms and Diagnosis fields).
  *
  * Values are picked from `options`, and anything not already listed can be
- * typed and created inline, mirroring how Frappe creates a linked record when
- * you type a name it doesn't recognise.
+ * created inline or via the bottom action, mirroring how Frappe creates a linked record.
  */
 export default function MultiSelect({
   options,
@@ -35,6 +42,10 @@ export default function MultiSelect({
   disabled = false,
   className,
   size = "default",
+  getOptionUrl,
+  doctype,
+  onCreateNew,
+  onCreateOption,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -64,20 +75,6 @@ export default function MultiSelect({
     );
   }, [options, value, needle]);
 
-  const exactMatch =
-    options.some((o) => o.toLowerCase() === needle) ||
-    value.some((v) => v.toLowerCase() === needle);
-  const showCreate = allowCreate && term.length > 0 && !exactMatch;
-
-  // Row list = matches, then the optional "Create" row.
-  const rows = useMemo(
-    () => [
-      ...available.map((o) => ({ kind: "option" as const, label: o })),
-      ...(showCreate ? [{ kind: "create" as const, label: term }] : []),
-    ],
-    [available, showCreate, term]
-  );
-
   useEffect(() => setHighlight(0), [search]);
 
   const add = (next: string) => {
@@ -93,6 +90,17 @@ export default function MultiSelect({
 
   const remove = (target: string) => onChange(value.filter((v) => v !== target));
 
+  const handleOpenCreate = () => {
+    const initialText = search.trim();
+    setOpen(false);
+    if (onCreateNew) {
+      onCreateNew(initialText);
+    } else if (initialText) {
+      add(initialText);
+      onCreateOption?.(initialText);
+    }
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !search && value.length) {
       e.preventDefault();
@@ -102,7 +110,7 @@ export default function MultiSelect({
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setOpen(true);
-      setHighlight((h) => Math.min(h + 1, rows.length - 1));
+      setHighlight((h) => Math.min(h + 1, available.length - 1));
       return;
     }
     if (e.key === "ArrowUp") {
@@ -112,9 +120,13 @@ export default function MultiSelect({
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      const row = rows[highlight];
-      if (row) add(row.label);
-      else if (term) add(term);
+      const option = available[highlight];
+      if (option) {
+        add(option);
+      } else if (term) {
+        add(term);
+        onCreateOption?.(term);
+      }
       return;
     }
     if (e.key === "Escape") {
@@ -140,32 +152,47 @@ export default function MultiSelect({
           inputRef.current?.focus();
         }}
       >
-        {value.map((item) => (
-          <span
-            key={item}
-            className={cn(
-              "inline-flex max-w-full items-center gap-1.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200/70 shadow-xs",
-              size === "large"
-                ? "px-2.5 py-1 text-sm font-bold"
-                : "px-2 py-0.5 text-xs font-medium"
-            )}
-          >
-            <span className="truncate">{item}</span>
-            {!disabled && (
-              <button
-                type="button"
-                aria-label={`Remove ${item}`}
-                className="text-emerald-600 hover:text-emerald-950 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-emerald-700 rounded-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  remove(item);
-                }}
-              >
-                <Icon icon="solar:close-circle-bold" size={size === "large" ? 15 : 13} />
-              </button>
-            )}
-          </span>
-        ))}
+        {value.map((item) => {
+          const url = getOptionUrl ? getOptionUrl(item) : undefined;
+          return (
+            <span
+              key={item}
+              className={cn(
+                "inline-flex max-w-full items-center gap-1.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200/70 shadow-xs",
+                size === "large"
+                  ? "px-2.5 py-1 text-sm font-bold"
+                  : "px-2 py-0.5 text-xs font-medium"
+              )}
+            >
+              <span className="truncate">{item}</span>
+              {url && (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-emerald-700 hover:text-emerald-950 text-[11px] underline flex items-center gap-0.5 shrink-0"
+                  title="Open clinical reference guide"
+                >
+                  <Icon icon="solar:link-linear" size={11} />
+                </a>
+              )}
+              {!disabled && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${item}`}
+                  className="text-emerald-600 hover:text-emerald-950 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-emerald-700 rounded-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(item);
+                  }}
+                >
+                  <Icon icon="solar:close-circle-bold" size={size === "large" ? 15 : 13} />
+                </button>
+              )}
+            </span>
+          );
+        })}
         <input
           ref={inputRef}
           disabled={disabled}
@@ -186,38 +213,61 @@ export default function MultiSelect({
         />
       </div>
 
-      {open && !disabled && (rows.length > 0 || available.length === 0) && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover py-1 shadow-md">
-          {rows.length === 0 ? (
+      {open && !disabled && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover py-1 shadow-md">
+          {available.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</div>
           ) : (
-            rows.map((row, i) => (
+            available.map((opt, i) => {
+              const url = getOptionUrl ? getOptionUrl(opt) : undefined;
+              return (
+                <div
+                  key={opt}
+                  className={cn(
+                    "flex w-full items-center justify-between px-3 py-1.5 text-left cursor-pointer transition-colors",
+                    size === "large" ? "text-sm font-semibold" : "text-sm",
+                    i === highlight && "bg-accent"
+                  )}
+                  onMouseEnter={() => setHighlight(i)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    add(opt);
+                  }}
+                >
+                  <span className="truncate">{opt}</span>
+                  {url && (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[11px] text-primary/70 hover:text-primary flex items-center gap-0.5 ml-2 shrink-0 font-normal"
+                    >
+                      Detail <Icon icon="solar:link-linear" size={11} />
+                    </a>
+                  )}
+                </div>
+              );
+            })
+          )}
+
+          {/* Action button at the bottom of the scrollable list (scroll down to bottom to show) */}
+          {allowCreate && (
+            <div className="border-t bg-muted/20 p-1 mt-1">
               <button
-                key={`${row.kind}-${row.label}`}
                 type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left",
-                  size === "large" ? "text-sm font-semibold" : "text-sm",
-                  i === highlight && "bg-accent"
-                )}
-                onMouseEnter={() => setHighlight(i)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded transition-colors text-left cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  add(row.label);
+                  handleOpenCreate();
                 }}
               >
-                {row.kind === "create" ? (
-                  <>
-                    <Icon icon="solar:add-circle-bold" size={14} className="text-emerald-600" />
-                    <span className="truncate">
-                      Create <span className="font-medium">“{row.label}”</span>
-                    </span>
-                  </>
-                ) : (
-                  <span className="truncate">{row.label}</span>
-                )}
+                <Icon icon="solar:add-circle-bold" size={15} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span className="truncate">
+                  Create a new {doctype || "item"}{term ? ` "${term}"` : ""}
+                </span>
               </button>
-            ))
+            </div>
           )}
         </div>
       )}
